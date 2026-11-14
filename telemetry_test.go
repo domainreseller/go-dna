@@ -94,8 +94,8 @@ func TestParseDSN(t *testing.T) {
 			t.Errorf("parseDSN(%q) must fail", bad)
 		}
 	}
-	if DefaultSentryDSN != "" {
-		t.Error("DefaultSentryDSN must stay empty until the Sentry project exists")
+	if _, ok := parseDSN(DefaultSentryDSN); !ok {
+		t.Error("DefaultSentryDSN must be a valid DSN")
 	}
 }
 
@@ -178,7 +178,7 @@ func TestTelemetryOffAndIgnored(t *testing.T) {
 	c.GetDetails("example.com")
 	tel.none(t)
 
-	c = New("r", "k", false, WithHTTPClient(staticDoer{500, `{"message":"boom"}`}), WithTelemetryClient(tel))
+	c = New("r", "k", false, WithHTTPClient(staticDoer{500, `{"message":"boom"}`}), WithSentryDSN(""), WithTelemetryClient(tel))
 	c.GetDetails("example.com") // empty DSN: no-op
 	tel.none(t)
 }

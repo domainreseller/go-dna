@@ -19,10 +19,14 @@ import (
 	"time"
 )
 
-// DefaultSentryDSN is where error reports and sampled performance records
-// go. Empty: telemetry is a no-op until then.
-// It is filled in when the DomainNameAPI-Go Sentry project exists.
-const DefaultSentryDSN = ""
+// DefaultSentryDSN is DomainNameAPI's Sentry project for go-dna, where error
+// reports and sampled performance records go. SetErrorReportingEnabled(false)
+// turns reporting off; WithSentryDSN overrides the target.
+const DefaultSentryDSN = "https://b0a1abe6a964a0c04ee74b40486e9daa@sentry.atakdomain.com/19"
+
+// defaultSentryDSN is what New uses; the test suite blanks it so tests never
+// reach the real Sentry project.
+var defaultSentryDSN = DefaultSentryDSN
 
 // PerformanceSampleRate is the share of successful calls (per 1000) sent as
 // performance records; calls slower than one second are always sent.

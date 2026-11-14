@@ -32,7 +32,7 @@ wire and the same return values. The standard library is the only dependency.
 With Go modules, pin a released version:
 
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.0
+go get github.com/domainreseller/go-dna@v1.0.1
 ```
 
 ```go
@@ -921,9 +921,6 @@ test gateway `https://ote.domainresellerapi.com/api/v1`. Test-mode telemetry is 
 When an API call fails, the library can send an error report to DomainNameAPI's own error tracker
 (Sentry). A small random share of successful calls (4%, plus every call slower than 1 second) is sent
 as a performance record. Reporting is **on by default**.
-
-> ℹ️ The Sentry project for `DomainNameAPI-Go` is not created yet: `DefaultSentryDSN` is empty, so
-> nothing is sent until a release sets it. `dna.WithSentryDSN(...)` overrides the DSN.
 
 **What is sent:** error code and message; endpoint path and HTTP method; call duration; library name
 (`DomainNameAPI-Go`), library version and Go version; reseller ID and domain name; the server's

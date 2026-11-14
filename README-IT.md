@@ -32,7 +32,7 @@ rete e gli stessi valori di ritorno. La libreria standard è l'unica dipendenza.
 Con i moduli Go, fissa una versione rilasciata:
 
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.0
+go get github.com/domainreseller/go-dna@v1.0.1
 ```
 
 ```go
@@ -920,9 +920,6 @@ di test OTE `https://ote.domainresellerapi.com/api/v1`. La telemetria in modalit
 Quando una chiamata API non riesce, la libreria può inviare una segnalazione di errore al sistema di tracciamento errori di DomainNameAPI
 (Sentry). Una piccola quota casuale delle chiamate riuscite (il 4%, più ogni chiamata che dura oltre 1 secondo) viene inviata
 come record di performance. La segnalazione è **attiva per impostazione predefinita**.
-
-> ℹ️ Il progetto Sentry per `DomainNameAPI-Go` non è ancora stato creato: `DefaultSentryDSN` è vuoto, quindi
-> non viene inviato nulla finché una release non lo imposta. `dna.WithSentryDSN(...)` sovrascrive il DSN.
 
 **Cosa viene inviato:** codice e messaggio di errore; percorso dell'endpoint e metodo HTTP; durata della chiamata; nome della libreria
 (`DomainNameAPI-Go`), versione della libreria e versione di Go; Reseller ID e nome di dominio; l'indirizzo IP

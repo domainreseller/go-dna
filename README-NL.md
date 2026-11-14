@@ -32,7 +32,7 @@ lijn en dezelfde retourwaarden. De standaardbibliotheek is de enige afhankelijkh
 Leg met Go modules een uitgebrachte versie vast:
 
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.0
+go get github.com/domainreseller/go-dna@v1.0.1
 ```
 
 ```go
@@ -931,9 +931,6 @@ Wanneer een API-aanroep mislukt, kan de bibliotheek een foutrapport sturen naar 
 fouttracker van DomainNameAPI (Sentry). Een klein willekeurig deel van de geslaagde aanroepen (4%,
 plus elke aanroep die langer duurt dan 1 seconde) wordt als prestatierecord verzonden. Rapportage
 staat **standaard aan**.
-
-> ℹ️ Het Sentry-project voor `DomainNameAPI-Go` is nog niet aangemaakt: `DefaultSentryDSN` is leeg,
-> dus er wordt niets verzonden totdat een release deze instelt. `dna.WithSentryDSN(...)` overschrijft de DSN.
 
 **Wat wordt verzonden:** foutcode en -melding; endpointpad en HTTP-methode; duur van de aanroep;
 bibliotheeknaam (`DomainNameAPI-Go`), bibliotheekversie en Go-versie; reseller ID en domeinnaam; het

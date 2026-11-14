@@ -32,7 +32,7 @@ der Leitung und dieselben Rückgabewerte. Die einzige Abhängigkeit ist die Stan
 Pinnen Sie mit Go-Modulen eine veröffentlichte Version:
 
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.0
+go get github.com/domainreseller/go-dna@v1.0.1
 ```
 
 ```go
@@ -932,9 +932,6 @@ Wenn ein API-Aufruf fehlschlägt, kann die Bibliothek einen Fehlerbericht an den
 von DomainNameAPI (Sentry) senden. Ein kleiner, zufällig gewählter Anteil erfolgreicher Aufrufe (4 %,
 dazu jeder Aufruf, der länger als 1 Sekunde dauert) wird als Performance-Datensatz gesendet.
 Fehlerberichte sind **standardmäßig aktiviert**.
-
-> ℹ️ Das Sentry-Projekt für `DomainNameAPI-Go` ist noch nicht angelegt: `DefaultSentryDSN` ist leer,
-> daher wird nichts gesendet, bis ein Release diesen Wert setzt. `dna.WithSentryDSN(...)` überschreibt den DSN.
 
 **Was gesendet wird:** Fehlercode und -meldung; Endpunktpfad und HTTP-Methode; Dauer des Aufrufs;
 Bibliotheksname (`DomainNameAPI-Go`), Bibliotheksversion und Go-Version; Reseller-ID und Domainname;

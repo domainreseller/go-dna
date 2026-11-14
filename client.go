@@ -122,7 +122,7 @@ func New(resellerID, apiKey string, testMode any, opts ...Option) *Client {
 		serviceURL:            URLProd,
 		sslVerify:             true,
 		errorReportingEnabled: true,
-		errorReportingDSN:     DefaultSentryDSN,
+		errorReportingDSN:     defaultSentryDSN,
 		lastRequest:           map[string]any{},
 		lastResponse:          map[string]any{},
 		lastResponseHeaders:   map[string]any{},

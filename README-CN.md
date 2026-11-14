@@ -31,7 +31,7 @@ DomainNameAPI 域名注册商 REST API 的 Go 客户端。它是
 使用 Go modules 时，请固定到一个已发布的版本：
 
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.0
+go get github.com/domainreseller/go-dna@v1.0.1
 ```
 
 ```go
@@ -903,9 +903,6 @@ client.SetServiceURL("https://ote.domainresellerapi.com/api/v1")
 
 当 API 调用失败时，本库可以向 DomainNameAPI 自己的错误跟踪系统（Sentry）发送一份错误报告。
 成功调用中会随机抽取一小部分（4%，另外所有耗时超过 1 秒的调用）作为性能记录发送。错误报告**默认开启**。
-
-> ℹ️ `DomainNameAPI-Go` 的 Sentry 项目尚未创建：`DefaultSentryDSN` 为空，因此在某个发布版本设置它之前
-> 不会发送任何内容。`dna.WithSentryDSN(...)` 可覆盖 DSN。
 
 **发送的内容：** 错误代码和消息；端点路径和 HTTP 方法；调用耗时；库名称
 （`DomainNameAPI-Go`）、库版本和 Go 版本；经销商 ID（Reseller ID）和域名；服务器的公网 IP 地址

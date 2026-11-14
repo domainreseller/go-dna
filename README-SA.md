@@ -31,7 +31,7 @@
 باستخدام Go modules، ثبّت إصدارًا منشورًا محددًا:
 
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.0
+go get github.com/domainreseller/go-dna@v1.0.1
 ```
 
 ```go
@@ -919,9 +919,6 @@ client.SetServiceURL("https://ote.domainresellerapi.com/api/v1")
 عندما يفشل استدعاء API، يمكن للمكتبة إرسال تقرير خطأ إلى نظام تتبع الأخطاء الخاص بـ DomainNameAPI
 (Sentry). كما يُرسَل جزء صغير عشوائي من الاستدعاءات الناجحة (4%، بالإضافة إلى كل استدعاء تتجاوز مدته ثانية واحدة)
 كسجل أداء. تقارير الأخطاء **مفعّلة افتراضيًا**.
-
-> ℹ️ لم يُنشأ مشروع Sentry الخاص بـ `DomainNameAPI-Go` بعد: `DefaultSentryDSN` فارغ، لذا
-> لا يُرسَل شيء حتى يقوم أحد الإصدارات بتعيينه. تتجاوز `dna.WithSentryDSN(...)` قيمة DSN.
 
 **ما يتم إرساله:** رمز الخطأ ورسالته؛ مسار نقطة النهاية وطريقة HTTP؛ مدة الاستدعاء؛ اسم المكتبة
 (`DomainNameAPI-Go`) وإصدار المكتبة وإصدار Go؛ معرّف الموزع (Reseller ID) واسم النطاق؛ عنوان IP

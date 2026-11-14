@@ -1,7 +1,7 @@
 package dna
 
 // Version is the version of this library.
-const Version = "1.0.0"
+const Version = "1.0.1"
 
 // ApplicationName identifies this library in telemetry events.
 const ApplicationName = "DomainNameAPI-Go"

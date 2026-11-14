@@ -32,7 +32,7 @@ değerleri. Tek bağımlılığı standart kütüphanedir.
 Go modülleriyle, yayınlanmış bir sürümü sabitleyin:
 
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.0
+go get github.com/domainreseller/go-dna@v1.0.1
 ```
 
 ```go
@@ -923,9 +923,6 @@ argümanı olarak `true` (veya `"true"`, `"1"`, `"on"`, `"yes"`) verin. Test mod
 Bir API çağrısı başarısız olduğunda kütüphane, DomainNameAPI'nin kendi hata takip sistemine (Sentry)
 bir hata raporu gönderebilir. Başarılı çağrıların rastgele seçilen küçük bir kısmı (%4, ayrıca 1
 saniyeden uzun süren her çağrı) performans kaydı olarak gönderilir. Raporlama **varsayılan olarak açıktır**.
-
-> ℹ️ `DomainNameAPI-Go` için Sentry projesi henüz oluşturulmadı: `DefaultSentryDSN` boştur; bu nedenle
-> bir sürüm bu değeri ayarlayana kadar hiçbir şey gönderilmez. `dna.WithSentryDSN(...)` DSN'i geçersiz kılar.
 
 **Gönderilenler:** hata kodu ve mesajı; uç nokta yolu ve HTTP yöntemi; çağrı süresi; kütüphane adı
 (`DomainNameAPI-Go`), kütüphane sürümü ve Go sürümü; bayi kimliği (Reseller ID) ve alan adı; sunucunun

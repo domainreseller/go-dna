@@ -32,7 +32,7 @@ DomainNameAPI domen qeydiyyatçısının REST API-si üçün Go klienti. Bu,
 Go modules ilə buraxılmış bir versiyanı sabitləyin:
 
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.0
+go get github.com/domainreseller/go-dna@v1.0.1
 ```
 
 ```go
@@ -925,9 +925,6 @@ telemetriya `environment: ote` ilə etiketlənir.
 API çağırışı uğursuz olduqda kitabxana DomainNameAPI-nin öz xəta izləyicisinə (Sentry) xəta hesabatı
 göndərə bilər. Uğurlu çağırışların kiçik təsadüfi bir hissəsi (4%, üstəlik 1 saniyədən uzun çəkən hər
 çağırış) performans qeydi kimi göndərilir. Hesabat **standart olaraq aktivdir**.
-
-> ℹ️ `DomainNameAPI-Go` üçün Sentry layihəsi hələ yaradılmayıb: `DefaultSentryDSN` boşdur, buna görə
-> bir buraxılış onu təyin edənə qədər heç nə göndərilmir. `dna.WithSentryDSN(...)` DSN-i əvəz edir.
 
 **Nə göndərilir:** xəta kodu və mesajı; endpoint yolu və HTTP metodu; çağırışın müddəti; kitabxananın
 adı (`DomainNameAPI-Go`), kitabxana versiyası və Go versiyası; reseller ID və domen adı; serverin

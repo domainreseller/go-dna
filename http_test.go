@@ -38,7 +38,7 @@ func TestRequestHeadersAndQuery(t *testing.T) {
 	if got.Header.Get("__reseller") != "reseller-id" {
 		t.Errorf("__reseller = %q", got.Header.Get("__reseller"))
 	}
-	if got.Header.Get("User-Agent") != "DomainNameAPI-Go/1.0.0" {
+	if got.Header.Get("User-Agent") != "DomainNameAPI-Go/1.0.1" {
 		t.Errorf("User-Agent = %q", got.Header.Get("User-Agent"))
 	}
 	if got.Header.Get("Accept") != "application/json" || got.Header.Get("Content-Type") != "application/json" {

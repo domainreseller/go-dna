@@ -32,7 +32,7 @@ réseau et les mêmes valeurs de retour. La bibliothèque standard est son uniqu
 Avec les modules Go, fixez une version publiée :
 
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.0
+go get github.com/domainreseller/go-dna@v1.0.1
 ```
 
 ```go
@@ -920,9 +920,6 @@ de test OTE `https://ote.domainresellerapi.com/api/v1`. La télémétrie en mode
 Lorsqu'un appel API échoue, la bibliothèque peut envoyer un rapport d'erreur au système de suivi des erreurs propre à DomainNameAPI
 (Sentry). Une petite part aléatoire des appels réussis (4 %, plus tout appel de plus d'une seconde) est envoyée
 sous forme d'enregistrement de performance. Les rapports sont **activés par défaut**.
-
-> ℹ️ Le projet Sentry pour `DomainNameAPI-Go` n'est pas encore créé : `DefaultSentryDSN` est vide, donc
-> rien n'est envoyé tant qu'une release ne le définit pas. `dna.WithSentryDSN(...)` remplace le DSN.
 
 **Ce qui est envoyé :** code et message d'erreur ; chemin du point de terminaison et méthode HTTP ; durée de l'appel ; nom de la bibliothèque
 (`DomainNameAPI-Go`), version de la bibliothèque et version de Go ; Reseller ID et nom de domaine ; l'adresse IP
