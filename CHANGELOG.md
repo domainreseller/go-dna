@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-11-19
+
+A new SDK, designed for Go and for the REST API instead of ported from php-dna. The module path is now
+`github.com/domainreseller/go-dna/v2`; v1 keeps working under the old path. See "Migrating from v1" in the
+README.
+
+### Added
+
+- All 64 operations of the REST API, grouped like the `dna` CLI: `Account`, `Contacts`, `Domains`, `DNS`,
+  `DNSSEC`, `SSL`, `Hosting`, `Orders` and `Products`. New compared to v1: contact handles and verification,
+  registration with handles, renew check, restore, auth code update, registry documents, DNSSEC, SSL
+  certificates, hosting, orders, balance transactions and product prices.
+- Typed results, typed enums with names (`DomainStatusPendingDelete`) and tolerant decoding of the API's
+  quirks: dates without a timezone, `[]` instead of `{}`, numeric or named statuses, roles in any case.
+- A request type per operation (`DomainRegisterRequest`, `DNSAddRequest`, ...) implementing `Request`. Every
+  request embeds `BaseRequest`, validates itself before sending and has a safety class (`Read`, `Write`,
+  `Destructive`, `Billable`). `Client.Do` sends your own request types too; `Client.NewHTTPRequest` previews a
+  request without sending it.
+- Typed errors (`APIError`, `OperationError` for `"success": false`, `InputError`, `NetworkError`) with
+  `KindOf`, `IsNotFound`, `IsAuth`, `IsRateLimited`, `IsInsufficientBalance`, `HasCode`, `OutcomeUnknown` and
+  `APIError.Hint`.
+- Iterators over paged lists: `Domains.All`, `Account.AllTransactions`, `Products.AllTLDs`.
+- `NewClientFromEnv` with the CLI's environment variables, `WithReadOnly`, `WithCurrency`, `WithLogger`,
+  `WithTrace`, `WithCorrelationID`, quota headers in `Response.Quota`, and `Hosting.Wait`.
+- Retries on 429 for every request and on network errors and 502/503/504 only for requests that are safe to
+  repeat; client-side pacing under the rate limits; a client that is safe for concurrent use.
+- Tests that check every request type, response type and enum against the API's OpenAPI document.
+
+### Removed
+
+- The php-dna compatible API: `dna.New`, the `map[string]any` results, the `{"result": "ERROR"}` envelopes and
+  the diagnostics getters (`GetRequestData`, ...). Use `WithTrace` or `WithLogger` instead.
+- Telemetry: the SDK no longer sends anything to Sentry. Forward `WithTrace` events to your own reporting.
+- `CancelTransfer`, `ApproveTransfer` and `RejectTransfer`, which called endpoints that are not part of the
+  published API.
+
 ## [1.0.1] - 2026-11-14
 
 ### Changed

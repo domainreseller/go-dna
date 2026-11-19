@@ -1,7 +1,7 @@
 <div align="center">
-  <a href="README-TR.md"   >   TR <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/TR.png" alt="TR" height="20" /></a>
+  <a href="README-TR.md">TR <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/TR.png" alt="TR" height="20" /></a>
   <a href="README.md"> | EN <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/US.png" alt="EN" height="20" /></a>
-   <a href="README-DE.md"> | DE <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/DE.png" alt="DE" height="20" /></a>
+  <a href="README-DE.md"> | DE <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/DE.png" alt="DE" height="20" /></a>
   <a href="README-SA.md"> | SA <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/SA.png" alt="AR" height="20" /></a>
   <a href="README-NL.md"> | NL <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/NL.png" alt="NL" height="20" /></a>
   <a href="README-AZ.md"> | AZ <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/AZ.png" alt="AZ" height="20" /></a>
@@ -9,971 +9,555 @@
   <a href="README-FR.md"> | FR <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/FR.png" alt="FR" height="20" /></a>
   <a href="README-IT.md"> | IT <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/IT.png" alt="IT" height="20" /></a>
 </div>
-# go-dna — 适用于 Go 的 DomainNameAPI 客户端
 
-DomainNameAPI 域名注册商 REST API 的 Go 客户端。它是
-[php-dna](https://github.com/domainreseller/php-dna) 的忠实移植：相同的方法、相同的线上请求以及相同的返回值。
-唯一的依赖是标准库。
+# go-dna：Domain Name API 的 Go SDK
 
-## 📦 下载 — 请务必使用 Releases！
+[![Go Reference](https://pkg.go.dev/badge/github.com/domainreseller/go-dna/v2.svg)](https://pkg.go.dev/github.com/domainreseller/go-dna/v2)
+[![CI](https://github.com/domainreseller/go-dna/actions/workflows/ci.yml/badge.svg)](https://github.com/domainreseller/go-dna/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-⬇️ **在此获取最新的经过测试的版本：https://github.com/domainreseller/go-dna/releases/latest**
+[Domain Name API](https://www.domainnameapi.com) 经销商 REST API 的强类型 Go 客户端：域名搜索、
+注册、续费与转入、DNS、DNSSEC、联系人、SSL 证书、主机托管、订单、产品
+目录以及账户余额。
 
-> ⚠️ 请**不要**使用绿色的 **Code → Download ZIP** 按钮 — 它下载的是原始开发分支。Release 包经过版本管理和测试，可直接用于生产环境。
+- **全部 64 个 API 操作**，分组方式与 [`dna` CLI](https://github.com/domainreseller/cli) 一致：
+  `dna domain info` 对应 `client.Domains.Info`，`dna dns add` 对应 `client.DNS.Add`。
+- **类型化的结果与枚举**：`d.Status == dna.DomainStatusPendingDelete`、`d.ExpirationDate.Before(...)`，
+  不再使用 `map[string]any`。
+- **每个操作都是一个请求类型**，内嵌 `dna.BaseRequest`，并在发送任何内容之前先对自身进行校验。
+  你也可以用同样的方式编写自己的请求。
+- **默认安全**：计费请求绝不会被盲目重试，`WithReadOnly` 会阻止任何变更，客户端会自行
+  控制请求节奏以遵守速率限制，并且可并发安全使用。
+- **仅依赖标准库。** 需要 Go 1.23 或更高版本。
 
-## 系统要求
+```go
+client, _ := dna.NewClient(resellerID, apiKey, dna.WithEnvironment(dna.OTE))
 
-- Go 1.21 或更高版本
-- 无第三方包（仅使用标准库中的 `net/http` 和 `encoding/json`）
+a, err := client.Domains.Search(ctx, "example.com")
+if err == nil && a.Available() {
+	fmt.Printf("%s is available for %.2f %s\n", a.DomainName, a.Price, a.Currency)
+}
+```
+
+## 目录
+
+- [安装](#安装)
+- [凭据与环境](#凭据与环境)
+- [服务](#服务)
+- [用法](#用法)
+- [请求与 BaseRequest](#请求与-baserequest)
+- [错误](#错误)
+- [安全与可靠性](#安全与可靠性)
+- [客户端选项](#客户端选项)
+- [测试你的代码](#测试你的代码)
+- [从 v1 迁移](#从-v1-迁移)
+- [开发](#开发)
 
 ## 安装
 
-使用 Go modules 时，请固定到一个已发布的版本：
+```bash
+go get github.com/domainreseller/go-dna/v2
+```
+
+```go
+import dna "github.com/domainreseller/go-dna/v2"
+```
+
+可运行的程序位于 [examples](examples)：`quickstart`、`register`、`expiring`、`dns`、`ssl` 和
+`custom-request`。
 
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.1
+go run ./examples/quickstart example.com
 ```
+
+## 凭据与环境
+
+你需要从经销商面板（**API settings**）获取两个 API 凭据。面板的登录信息无法使用。
+
+| 凭据        | 形式                                   |
+|-------------|----------------------------------------|
+| Reseller ID | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
+| API key     | 一长串密钥字符串                       |
+
+共有两个环境。**请先从 OTE 开始**，即测试环境：它有独立的数据和独立的 API key，
+在其中的任何操作都不会产生费用，也不会影响线上域名。
 
 ```go
-import dna "github.com/domainreseller/go-dna"
+// 测试环境 (OTE)
+client, err := dna.NewClient(resellerID, oteAPIKey, dna.WithEnvironment(dna.OTE))
+
+// 生产环境（默认）：真实注册，真实扣费
+client, err := dna.NewClient(resellerID, apiKey)
 ```
 
-包名为 `dna`。每个方法的可运行示例都位于 [examples](examples) 目录中：
+`NewClientFromEnv` 读取与 `dna` CLI 相同的变量：
 
-```bash
-go run ./examples/GetDetails
-```
-
-## 🔑 API 凭据 — Reseller ID 与 API Key
-
-本库只需要两项凭据，传入构造函数即可：
-
-| 参数 | 值 |
-|---|---|
-| 第一个 | Reseller ID — 形如 `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` 的 UUID |
-| 第二个 | API Key |
-
-> 💡 您可以在 DomainNameAPI 面板的 **API 设置** 中找到您的 **Reseller ID** 和 **API Key**。
-> ⚠️ 这些是 **API 凭据** — 面板登录信息在此**无法使用**。
+| 变量              | 含义                                                          |
+|-------------------|---------------------------------------------------------------|
+| `DNA_RESELLER_ID` | 经销商 ID                                                     |
+| `DNA_API_KEY`     | 所选环境的 API key                                            |
+| `DNA_ENV`         | `production`（默认）或 `ote`                                  |
+| `DNA_TEST_MODE`   | `true` 选择 OTE（与其他 DomainNameAPI SDK 一致）              |
+| `DNA_BASE_URL`    | 自定义基础 URL，例如代理                                      |
 
 ```go
-resellerID := "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-apiKey := "your-api-key"
-
-// 正式环境
-client := dna.New(resellerID, apiKey, false)
-
-// 测试（OTE）环境
-client = dna.New(resellerID, apiKey, true)
+client, err := dna.NewClientFromEnv(dna.WithUserAgent("my-panel/1.4"))
 ```
 
-两项凭据都会去除首尾空白。第三个参数也接受面板为复选框存储的字符串：`"true"`、`"1"`、`"on"`
-和 `"yes"`（不区分大小写）选择测试环境，其他任何值（`"false"`、`"0"`、`"off"`、`""` 等）选择正式环境。
+密钥或环境错误时，第一次请求就会失败，返回类型为 `KindAuth` 的 `*APIError` 并附带提示；
+`client.Account.Get(ctx)` 是最省事的检查方式。
 
-## 快速开始
+## 服务
+
+| 服务              | CLI 分组      | 操作                                                                                                                                                              |
+|-------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `client.Account`  | `dna account` | `Get`, `Transactions`, `AllTransactions`                                                                                                                          |
+| `client.Contacts` | `dna contact` | `Get`, `Create`, `Update`, `Verification`, `ResendVerification`                                                                                                   |
+| `client.Domains`  | `dna domain`  | `Search`, `BulkSearch`, `List`, `All`, `Info`, `Register`, `RegisterWithContacts`, `Renew`, `RenewCheck`, `Restore`, `Transfer`, `TransferCheck`, `TransferStatus`, `Lock`, `Unlock`, `SetPrivacy`, `UpdateAuthCode`, `SetNameServers`, `AddHost`, `UpdateHost`, `DeleteHost`, `UpdateContacts`, `SetContactHandles`, `Documents`, `UploadDocuments`, `Forwarding`, `SetForwarding`, `DeleteForwarding` |
+| `client.DNS`      | `dna dns`     | `List`, `Add`, `Update`, `Delete`, `Apply`                                                                                                                        |
+| `client.DNSSEC`   | `dna dnssec`  | `Get`, `Add`, `Remove`, `Disable`                                                                                                                                 |
+| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Approvers`, `Revoke`                                                |
+| `client.Hosting`  | `dna hosting` | `Packages`, `Plans`, `Create`, `Wait`, `Get`, `GetByToken`, `Status`                                                                                              |
+| `client.Orders`   | `dna order`   | `Get`                                                                                                                                                             |
+| `client.Products` | `dna product` | `List`, `Info`, `TLDs`, `AllTLDs`, `TLD`, `SSLs`                                                                                                                  |
+
+方法将必需的输入作为参数传入（`Info(ctx, "example.com")`）；当某个操作带有可选输入时，
+则传入一个请求结构体（`Register(ctx, dna.DomainRegisterRequest{...})`）。包含所有字段的完整参考
+见 [pkg.go.dev](https://pkg.go.dev/github.com/domainreseller/go-dna/v2)。
+
+## 用法
+
+以下所有代码片段均假定已有 `ctx := context.Background()` 和一个 `client`。
+
+### 搜索
 
 ```go
-package main
+a, err := client.Domains.Search(ctx, "example.com")
+// a.Available(), a.Price, a.Currency, a.IsPremium, a.IsDocumentRequired, a.Reason
 
-import (
-	"fmt"
-
-	dna "github.com/domainreseller/go-dna"
-)
-
-func main() {
-	client := dna.New("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "your-api-key", false)
-
-	result := client.GetDetails("example.com")
-	if result["result"] != "OK" {
-		e := result["error"].(map[string]any)
-		fmt.Println("Error:", e["Code"], e["Message"], e["Details"])
-		return
-	}
-	data := result["data"].(map[string]any)
-	fmt.Println(data["DomainName"], data["Status"], data["Dates"].(map[string]any)["Expiration"])
+results, err := client.Domains.BulkSearch(ctx, "example.com", "example.net", "example.org")
+for _, r := range results {
+	fmt.Println(r.DomainName, r.Status, r.Price)
 }
 ```
 
-## 返回值
+`BulkSearch` 会把超过 30 个域名的列表拆分为多个请求。价格使用账户的币种，或使用
+`dna.WithCurrency("TRY")` 设置的币种。
 
-各方法返回与 php-dna 相同的动态结构 — `map[string]any` 和 `[]any` — 而不是强类型模型，因此键名、
-字符串标志（`"true"`/`"false"`）以及格式化的金额字符串（`"11.9900"`）都与 php-dna 完全一致。
-来自网关的数字为 `int64` 或 `float64`。
+### 注册
 
-成功的调用如下所示：
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{ /* ... */ }}
-```
-
-失败的调用永远不会 panic，而是返回错误信封：
+使用联系人句柄（用 `Contacts.Create` 创建）：
 
 ```go
-map[string]any{
-	"result": "ERROR",
-	"error": map[string]any{
-		"Code":        "API_404", // API_<HTTP 状态码>、CURL_<n>，或库自身的代码，例如 RESPONSE
-		"Message":     "The domain name you requested could not be found. Please check and try again.",
-		"Details":     "The domain could not be found. Please check and try again.",
-		"GatewayCode": "Dna.DomainService:Domain:10007", // 仅与 API_<status> 一起出现，当网关发送了自己的代码时
-	},
-}
-```
+handle, err := client.Contacts.Create(ctx, dna.Contact{
+	FirstName: "Ada", LastName: "Lovelace", Email: "ada@example.com",
+	Address: "1 Example Street", City: "Istanbul", State: "Istanbul", PostalCode: "34000",
+	Country: "TR", PhoneCountryCode: "90", Phone: "5551234567",
+})
 
-有三个方法使用不同的结构，与 php-dna 完全一致：
-
-| 方法 | 成功 | 失败 |
-|---|---|---|
-| `CheckAvailability` | 一个裸 `[]any` 列表 | 错误信封（`map[string]any`），因此返回类型为 `any` |
-| `GetCurrentBalance` | `OperationResult: "SUCCESS"` 信封 | 相同的信封，但 `OperationResult: "FAILED"` |
-| `GetResellerDetails` | 扁平 map（`id`、`name`、`balance`、`balances` 等） | 错误信封 |
-
-### 可选参数
-
-Go 没有默认参数。各方法保持 php-dna 的参数顺序，并显式接收每一个参数；php-dna 的默认值在下文各节中给出。
-为方便起见，部分零值会选择默认值：`GetCurrentBalance("")` 表示 USD，`GetTldList(0)` 表示 20，
-`CheckAvailability(..., "")` 表示 `create`，`SetForwarding(..., "")` 表示 `Standard`。
-`RegisterWithContactInfo` 通过 `*RegisterOptions` 接收其四个可选参数（nil = 默认值）。
-`AddResourceRecordValue` 和 `ReplaceResourceRecordValue` 接收 `ttl *int`：`nil` 表示保留记录集当前的 TTL。
-
-### 联系人
-
-联系人是使用 php-dna 键名的 `map[string]any`（`FirstName`、`LastName`、`Company`、`EMail`、
-`AddressLine1`、`AddressLine2`、`City`、`State`、`Country`、`ZipCode`、`Phone`、
-`PhoneCountryCode`、`Fax`、`FaxCountryCode`）。嵌套结构（`Address.Line1`、
-`Phone.Phone.Number` 等）同样被接受。由于 Go 的 map 没有顺序，四个角色以有序的 `dna.Contacts` 列表传入：
-
-```go
-contacts := dna.Contacts{
-	{Role: "Administrative", Contact: contact},
-	{Role: "Billing", Contact: contact},
-	{Role: "Technical", Contact: contact},
-	{Role: "Registrant", Contact: contact},
-}
-contacts = dna.AllRoles(contact)                 // 四个角色使用同一个联系人
-contacts = dna.ContactsFromMap(map[string]map[string]any{ /* role => contact */ })
-```
-
-信息不完整的联系人会在发送前按照 `ValidateContact` 的规则补全。联系人由 `RegisterWithContactInfo`
-和 `SaveContacts` 使用；转移操作从不发送联系人。
-
-### 方法名称
-
-Go 方法名遵循 Go 的命名惯例；对应的 php-dna 名称就是其 lowerCamelCase 形式。
-`getServiceUrl`/`setServiceUrl` 对应 `GetServiceURL`/`SetServiceURL`，`setSslVerification` 对应
-`SetSSLVerification`。
-
-## 使用方法
-
-### 域名注册
-
-php-dna 默认值：默认名称服务器（`ns1.domainnameapi.com`、`ns2.domainnameapi.com`），EPP 锁定开启，
-隐私保护关闭，无附加属性。仅 `.tr` 等域名需要附加属性。
-
-```go
-contact := map[string]any{
-	"FirstName":        "John",
-	"LastName":         "Doe",
-	"Company":          "Example Corp",
-	"EMail":            "john.doe@example.com",
-	"AddressLine1":     "123 Lorem Street",
-	"AddressLine2":     "Suite 456",
-	"City":             "Springfield",
-	"Country":          "US",
-	"Fax":              "1234567890",
-	"FaxCountryCode":   "1",
-	"Phone":            "9876543210",
-	"PhoneCountryCode": 1,
-	"ZipCode":          "12345",
-	"State":            "IL",
-}
-
-opts := dna.DefaultRegisterOptions()
-opts.NameServers = []string{"ns1.example.com", "ns2.example.com"}
-opts.EppLock = true
-opts.PrivacyLock = false
-// 仅适用于 .tr 域名：
-opts.AdditionalAttributes = map[string]any{
-	"TRABISDOMAINCATEGORY": 1,             // 1 = 个人（Owner），0 = 公司（Corporate）
-	"TRABISCITIZIENID":     "12345678901", // 公司则使用 TRABISTAXOFFICE + TRABISTAXNUMBER
-}
-
-result := client.RegisterWithContactInfo("example.com", 1, dna.AllRoles(contact), opts)
-```
-
-对于 `.tr` 域名，旧版 TRABIS 名称会被规范化为网关的数据结构：类别变为 `Owner`/`Corporate`，
-`TRABISCITIZIENID` 变为 `TRABISCITIZENID`，国家、城市、姓名和组织字段会被删除（网关会从联系人中获取这些信息）。
-所有属性值都以字符串形式发送。
-
-<details>
-<summary>域名注册示例输出</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"ID":                      int64(0),
-		"Status":                  "Active",
-		"DomainName":              "",
-		"AuthCode":                "",
-		"LockStatus":              "false",
-		"PrivacyProtectionStatus": "false",
-		"IsChildNameServer":       "false",
-		"Contacts": map[string]any{
-			"Billing":        map[string]any{"ID": int64(0)},
-			"Technical":      map[string]any{"ID": int64(0)},
-			"Administrative": map[string]any{"ID": int64(0)},
-			"Registrant":     map[string]any{"ID": int64(0)},
-		},
-		"Dates": map[string]any{
-			"Start":         "",
-			"Expiration":    "2027-11-09T12:00:00",
-			"RemainingDays": int64(365),
-		},
-		"NameServers":      []any{},
-		"Additional":       []any{},
-		"ChildNameServers": []any{},
-	},
-}
-```
-
-注册端点只返回一条简短记录，因此大多数字段为空；如需完整的域名信息，请随后调用 `GetDetails`。当网关拒绝注册时
-（HTTP 200 且 `"success": false`），结果为错误，代码为 `REGISTER_DOMAIN`，并附带网关的消息。
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 域名续费
-
-```go
-result := client.Renew("example.com", 1)
-```
-
-<details>
-<summary>域名续费示例输出</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"ExpirationDate": "2026-03-15T10:00:00"}}
-```
-
-网关拒绝（`"success": false`）时返回代码 `RENEW_DOMAIN`；成功但没有到期日期时返回 `DOMAIN_RENEW`。
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 域名转移
-
-```go
-result := client.Transfer("example.com", "Xy9#mK2$", 1)
-```
-
-转移操作从不发送联系人：注册商会随域名一并接管联系人，因此请求始终携带一个空的联系人列表，
-该方法也没有联系人参数。返回结果与 `GetDetails` 的结构相同；网关拒绝（`"success": false`）时
-返回代码 `TRANSFER_DOMAIN` 并附带网关的消息。
-
-<details>
-<summary>域名转移示例输出</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"ID": int64(0), "Status": "Active", "DomainName": "", "AuthCode": "",
-		"LockStatus": "false", "PrivacyProtectionStatus": "false", "IsChildNameServer": "false",
-		"Contacts": map[string]any{ /* Billing, Technical, Administrative, Registrant: {"ID": 0} */ },
-		"Dates": map[string]any{"Start": "", "Expiration": "2027-11-09T12:00:00", "RemainingDays": int64(365)},
-		"NameServers": []any{}, "Additional": []any{}, "ChildNameServers": []any{},
-	},
-}
-```
-
-</details>
-
-相关的转移调用：
-
-```go
-client.CancelTransfer("example.com")  // {"result": "OK", "data": {"DomainName": "example.com", "Status": "Cancelled"}}
-client.ApproveTransfer("example.com") // {"result": "OK", "data": {"DomainName": "example.com", "Status": "Approved"}}
-client.RejectTransfer("example.com")  // {"result": "OK", "data": {"DomainName": "example.com", "Status": "Rejected"}}
-```
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 转移检查
-
-```go
-result := client.CheckTransfer("example.com", "Ab1!xyZ9")
-```
-
-只有当注册局报告该域名可转移时，`result` 才为 `OK`；否则为 `ERROR`，代码为 `TRANSFER_NOT_AVAILABLE`，
-并附带相同的 `data`。
-
-<details>
-<summary>转移检查示例输出</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"TransferAvailabilityStatus": true,
-		"AuthCodeIsRequired":         true,
-		"AuthCodeIsValid":            true,
-		"UserTransferRequired":       false,
-		"TransferLock":               false,
-		"Message":                    "Domain can be transferred",
-		"MessageKey":                 "TransferAvailable",
-		"Additional":                 []any{},
-	},
-}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 域名列表
-
-```go
-result := client.GetList(map[string]any{
-	"OrderColumn":    "Id",
-	"OrderDirection": "ASC",
-	"PageNumber":     0,
-	"PageSize":       1000,
+res, err := client.Domains.Register(ctx, dna.DomainRegisterRequest{
+	DomainName:  "example.com",
+	Years:       1,
+	NameServers: []string{"ns1.example.net", "ns2.example.net"},
+	Handles:     dna.SameHandle(handle), // 或 dna.ContactHandles{Registrant: "DNA-1", Admin: "DNA-2", ...}
 })
 ```
 
-`PageNumber`（从 0 开始）、`PageSize`、`OrderColumn` 和 `OrderDirection` 会被转换为网关的
-`SkipCount`、`MaxResultCount` 和 `Sorting`；其他键（例如 `DomainName`）作为筛选条件原样传递。
-传入 `nil` 时返回前 200 个域名。
-
-<details>
-<summary>域名列表示例输出</summary>
+使用内联联系人：
 
 ```go
-map[string]any{
-	"result":     "OK",
-	"TotalCount": int64(1),
-	"data": map[string]any{
-		"Domains": []any{
-			map[string]any{
-				"ID":                      int64(564346),
-				"Status":                  "Active",
-				"DomainName":              "example.com",
-				"AuthCode":                "",
-				"LockStatus":              "true",
-				"PrivacyProtectionStatus": "false",
-				"IsChildNameServer":       "false",
-				"Contacts": map[string]any{
-					"Billing":        map[string]any{"ID": ""},
-					"Technical":      map[string]any{"ID": ""},
-					"Administrative": map[string]any{"ID": ""},
-					"Registrant":     map[string]any{"ID": ""},
-				},
-				"Dates": map[string]any{
-					"Start":         "2024-03-15T10:20:30",
-					"Expiration":    "2027-03-15T10:20:30",
-					"RemainingDays": int64(126),
-				},
-				"NameServers":      []any{"ns1.example.com", "ns2.example.com"},
-				"Additional":       []any{},
-				"ChildNameServers": []any{},
-			},
-		},
-	},
+res, err := client.Domains.RegisterWithContacts(ctx, dna.DomainRegisterWithContactsRequest{
+	DomainName:  "example.com",
+	NameServers: []string{"ns1.example.net", "ns2.example.net"},
+	Contacts:    dna.SameContact(owner), // 或 dna.DomainContacts{Registrant: &owner, Admin: &admin, ...}
+})
+```
+
+联系人信息在发送前会先整理：字段会去除首尾空白，国家代码转为大写，电话字段只保留
+数字（`"+90 (555) 123-45-67"` 可以直接使用）。部分 TLD 需要注册局属性：用
+`client.Products.TLD(ctx, "com.tr")` 及其 `RequiredAttributes()` 查找，并通过 `TLDAttributes` 传入。
+
+如果 API 有响应但拒绝了请求（`"success": false`），返回的错误是 `*dna.OperationError`，
+其中带有 API 的消息。
+
+### 续费、转入、恢复
+
+```go
+check, err := client.Domains.RenewCheck(ctx, "example.com", 1) // check.Renewable, check.PremiumPrice
+res, err := client.Domains.Renew(ctx, "example.com", 1)
+
+tc, err := client.Domains.TransferCheck(ctx, "example.com", "auth-code") // tc.Transferable, tc.AuthCodeValid
+res, err := client.Domains.Transfer(ctx, dna.DomainTransferRequest{DomainName: "example.com", AuthCode: "auth-code"})
+st, err := client.Domains.TransferStatus(ctx, "example.com")
+
+err = client.Domains.Restore(ctx, "example.com") // 在赎回期内
+```
+
+### 域名详情与域名列表
+
+```go
+d, err := client.Domains.Info(ctx, "example.com")
+fmt.Println(d.Status, d.ExpirationDate, d.RemainingDays, d.Locked, d.NameServers, d.AuthCode)
+if owner, ok := d.Contact(dna.ContactTypeRegistrant); ok {
+	fmt.Println(owner.Email)
+}
+
+// 单页
+page, err := client.Domains.List(ctx, dna.DomainListRequest{ListOptions: dna.ListOptions{Limit: 50}})
+
+// 所有域名；分页由 SDK 自动获取
+for d, err := range client.Domains.All(ctx, dna.DomainListRequest{
+	Statuses: []dna.DomainStatus{dna.DomainStatusActive},
+}) {
+	if err != nil {
+		return err
+	}
+	fmt.Println(d.DomainName, d.ExpirationDate)
 }
 ```
 
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### TLD 列表
+### 锁定、隐私保护、域名服务器、子域名服务器
 
 ```go
-result := client.GetTldList(100) // php-dna 默认值：20
+err = client.Domains.Lock(ctx, "example.com")
+err = client.Domains.Unlock(ctx, "example.com")
+err = client.Domains.SetPrivacy(ctx, "example.com", true)
+code, err := client.Domains.UpdateAuthCode(ctx, "example.com")
+
+err = client.Domains.SetNameServers(ctx, dna.DomainNameServersSetRequest{
+	DomainName:  "example.com",
+	NameServers: []string{"ns1.example.net", "ns2.example.net"},
+	// DNSSECMode: dna.DNSSECModeDisable, // 仅适用于已启用 DNSSEC 签名的域名
+})
+
+err = client.Domains.AddHost(ctx, "example.com", "ns1.example.com", "192.0.2.10", "2001:db8::10") // 自动识别 IP 版本
+err = client.Domains.DeleteHost(ctx, "example.com", "ns1.example.com")
 ```
 
-<details>
-<summary>TLD 列表示例输出</summary>
+### 域名的联系人
 
 ```go
-map[string]any{
-	"result": "OK",
-	"data": []any{
-		map[string]any{
-			"id": int64(1), "status": "Active", "tld": "com",
-			"maxchar": int64(63), "maxperiod": int64(10), "minchar": int64(1), "minperiod": int64(1),
-			"pricing": map[string]any{
-				"registration": map[string]any{"1": "10.8100", "2": "21.6200"},
-				"renew":        map[string]any{"1": "11.0100"},
-				"transfer":     map[string]any{"1": "10.6100"},
-				"restore":      map[string]any{"1": "99.9000"},
-			},
-			"currencies": map[string]any{
-				"registration": "USD", "renew": "USD", "transfer": "USD", "restore": "USD",
-			},
-		},
-	},
+err = client.Domains.SetContactHandles(ctx, "example.com", dna.ContactHandles{Admin: "DNA-2", Tech: "DNA-2"})
+err = client.Domains.UpdateContacts(ctx, "example.com", dna.DomainContacts{Billing: &billing})
+
+details, err := client.Contacts.Get(ctx, "DNA-1")           // 联系人及其验证状态
+result, err := client.Contacts.Update(ctx, "DNA-1", contact) // 更新所有使用该句柄的域名
+```
+
+### DNS 区域
+
+```go
+err = client.DNS.Add(ctx, dna.DNSAddRequest{
+	DomainName: "example.com", Name: "www", Type: dna.RecordTypeA, TTL: 600, Values: []string{"192.0.2.10"},
+})
+err = client.DNS.Update(ctx, dna.DNSUpdateRequest{ // 替换该记录集的所有值
+	DomainName: "example.com", RecordName: "www", Type: dna.RecordTypeA, Values: []string{"192.0.2.20"},
+})
+err = client.DNS.Delete(ctx, dna.DNSDeleteRequest{
+	DomainName: "example.com", Name: "www", Type: dna.RecordTypeA, Value: "192.0.2.20",
+})
+
+sets, err := client.DNS.List(ctx, "example.com")
+for _, s := range sets {
+	fmt.Println(s.Name, s.Type, s.TTL, s.Values())
 }
+
+res, err := client.DNS.Apply(ctx, "example.com") // 将域名切换到平台的域名服务器
 ```
 
-</details>
+名称可以是相对名称（`www`）、根域（`""` 或 `"@"`）或完全限定名称。此处记录类型不区分
+大小写（`"txt"` 会作为 `TXT` 发送）。校验会拦截 API 会拒绝的内容：根域上的 CNAME、
+不足三个部分的 CAA 值、缺少优先级的 MX 值。测试环境对每个区域调用都返回 HTTP
+500，因此区域相关代码只能在生产环境中试用。
 
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 域名可用性检查
+### DNSSEC
 
 ```go
-result := client.CheckAvailability([]string{"hello", "world123x0"}, []string{"com", "net"}, 1, "create")
-if list, ok := result.([]any); ok {
-	// 成功
-	_ = list
-}
+ds, err := dna.ParseDS("2371 13 2 1F987CC6583E92DF0890718C42...") // 与你的 DNS 提供商显示的格式一致
+results, err := client.DNSSEC.Add(ctx, "example.com", ds)
+info, err := client.DNSSEC.Get(ctx, "example.com") // info.Status, info.DSRecords
+res, err := client.DNSSEC.Disable(ctx, "example.com")
 ```
-
-<details>
-<summary>域名可用性检查示例输出</summary>
-
-```go
-[]any{
-	map[string]any{
-		"TLD": "com", "DomainName": "hello", "Status": "notavailable", "Command": "create",
-		"Period": int64(1), "IsFee": false, "Price": "10.8100", "Currency": "USD", "Reason": "Domain exists",
-	},
-	map[string]any{
-		"TLD": "com", "DomainName": "world123x0", "Status": "available", "Command": "create",
-		"Period": int64(1), "IsFee": false, "Price": "10.8100", "Currency": "USD", "Reason": nil,
-	},
-}
-```
-
-对于溢价（premium）域名，`IsFee` 为 `true`。
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 域名详情
-
-```go
-result := client.GetDetails("example.com")
-result = client.SyncFromRegistry("example.com") // 结构相同
-```
-
-<details>
-<summary>域名详情示例输出</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"ID":                      int64(564346),
-		"Status":                  "Active",
-		"DomainName":              "example.com",
-		"AuthCode":                "DHQ!K52",
-		"LockStatus":              "true",
-		"PrivacyProtectionStatus": "false",
-		"IsChildNameServer":       "true",
-		"Contacts": map[string]any{
-			"Billing":        map[string]any{"ID": "DNA-B-4"},
-			"Technical":      map[string]any{"ID": "DNA-T-3"},
-			"Administrative": map[string]any{"ID": "DNA-A-2"},
-			"Registrant":     map[string]any{"ID": "DNA-R-1"},
-		},
-		"Dates": map[string]any{
-			"Start":         "2024-03-15T10:20:30",
-			"Expiration":    "2027-03-15T10:20:30",
-			"RemainingDays": int64(126),
-		},
-		"NameServers":      []any{"ns1.example.com", "ns2.example.com"},
-		"Additional":       map[string]any{"TRABISDOMAINCATEGORY": "1"},
-		"ChildNameServers": []any{map[string]any{"ns": "ns1.example.com", "ip": "1.2.3.4"}},
-	},
-}
-```
-
-即使网关发送的是数字枚举值，`Status` 也是文本标签（`Active`、`TransferredOut`、`PendingDelete` 等）。
-无法解析的日期会变为 `""`，绝不会变成虚假的 1970 年日期。
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 修改名称服务器
-
-```go
-result := client.ModifyNameServer("example.com", []string{"ns1.example.com", "ns2.example.com"})
-```
-
-也接受 map（按键的顺序使用其值）。发送前，各条目会被去除首尾空白、转换为小写、去掉末尾的点并去重；结果中返回的就是规范化后的列表。
-
-<details>
-<summary>修改名称服务器示例输出</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServers": []any{"ns1.example.com", "ns2.example.com"}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 启用域名锁定
-
-```go
-result := client.EnableTheftProtectionLock("example.com")
-```
-
-<details>
-<summary>启用域名锁定示例输出</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"LockStatus": true}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 禁用域名锁定
-
-```go
-result := client.DisableTheftProtectionLock("example.com")
-```
-
-<details>
-<summary>禁用域名锁定示例输出</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"LockStatus": false}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 添加子名称服务器
-
-```go
-result := client.AddChildNameServer("example.com", "ns1.example.com", "1.2.3.4")
-```
-
-<details>
-<summary>添加子名称服务器示例输出</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServer": "ns1.example.com", "IPAdresses": []any{"1.2.3.4"}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 删除子名称服务器
-
-```go
-result := client.DeleteChildNameServer("example.com", "ns1.example.com")
-```
-
-<details>
-<summary>删除子名称服务器示例输出</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServer": "ns1.example.com"}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 修改子名称服务器
-
-```go
-result := client.ModifyChildNameServer("example.com", "ns1.example.com", "1.2.3.5")
-```
-
-<details>
-<summary>修改子名称服务器示例输出</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServer": "ns1.example.com", "IPAdresses": []any{"1.2.3.5"}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 修改隐私保护状态
-
-```go
-result := client.ModifyPrivacyProtectionStatus("example.com", true, "Owner request")
-```
-
-`status` 可以是 bool，也可以是面板存储的值：`true`、`1`、`"1"`、`"true"`、`"on"` 和 `"yes"` 启用
-隐私保护，其他任何值（`"off"`、`"0"`、`false` 等）则禁用。原因参数仅为兼容 php-dna 而保留，不会被发送：
-网关没有这样的字段。
-
-<details>
-<summary>修改隐私保护状态示例输出</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"PrivacyProtectionStatus": true}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 获取域名联系人
-
-```go
-result := client.GetContacts("example.com")
-```
-
-网关返回的联系人类型按不区分大小写的方式匹配（`Admin`/`Administrative`、`Tech`/`Technical`、
-`Registrant`/`Owner`、`Billing`）；其他任何类型都会以其首字母大写的名称保留。
-
-<details>
-<summary>获取域名联系人示例输出</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"contacts": map[string]any{
-			"Administrative": map[string]any{
-				"ID": "DNA-A-2", "Status": "Active", "AuthCode": "",
-				"FirstName": "Grace", "LastName": "Hopper", "Company": "", "EMail": "grace@example.com",
-				"Type": "Administrative",
-				"Address": map[string]any{
-					"Line1": "Example Street 2", "Line2": "", "Line3": "",
-					"State": "DC", "City": "Washington", "Country": "US", "ZipCode": "20001",
-				},
-				"Phone": map[string]any{
-					"Phone": map[string]any{"Number": "2025550100", "CountryCode": "1"},
-					"Fax":   map[string]any{"Number": "2025550101", "CountryCode": "1"},
-				},
-				"Additional": []any{},
-			},
-			// "Billing"、"Registrant"、"Technical"：结构相同
-		},
-	},
-}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 保存域名联系人
-
-```go
-result := client.SaveContacts("example.com", dna.AllRoles(contact))
-```
-
-<details>
-<summary>保存域名联系人示例输出</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"contacts": map[string]any{}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 获取经销商详细信息
-
-```go
-result := client.GetResellerDetails()
-```
-
-<details>
-<summary>获取经销商详细信息示例输出</summary>
-
-```go
-map[string]any{
-	"result":   "OK",
-	"id":       "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-	"active":   true,
-	"name":     "Example Reseller",
-	"balance":  "601.64",
-	"currency": "USD",
-	"symbol":   "$",
-	"balances": []any{
-		map[string]any{"balance": "601.64", "currency": "USD", "symbol": "$"},
-		map[string]any{"balance": "1250.50", "currency": "TL", "symbol": "TL"},
-	},
-}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 获取当前余额
-
-```go
-result := client.GetCurrentBalance("USD") // USD（默认）、TRY、EUR 或 GBP
-```
-
-<details>
-<summary>获取当前余额示例输出</summary>
-
-```go
-map[string]any{
-	"ErrorCode":        int64(0),
-	"OperationMessage": "Command completed succesfully.",
-	"OperationResult":  "SUCCESS",
-	"Balance":          "601.64",
-	"CurrencyId":       int64(2),
-	"CurrencyInfo":     nil,
-	"CurrencyName":     "USD",
-	"CurrencySymbol":   "$",
-}
-```
-
-失败时：`ErrorCode` 为 `API_<status>`（或 `CURL_<n>`），`OperationMessage` 为错误消息，
-`OperationResult` 为 `"FAILED"`，`Balance` 为 `"0.00"`。账户只报告 USD 和 TRY 余额：
-对于其他任何货币，结果为 `FAILED`，`ErrorCode: "BALANCE"`，消息为
-`No EUR balance is reported for this account. Available: USD, TRY.`
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### DNS 区域管理
-
-网关以**记录集**的形式存储记录（一个名称 + 类型及其所有值），每次写入都会替换整个记录集。
-记录名称可以写作 `@`、`""`、区域顶点（apex）、相对标签（`www`）或完整名称（`www.example.com`）；
-它们都会被归约为网关所期望的相对标签。支持的类型：`A`、`AAAA`、`ALIAS`、`CAA`、`CNAME`、`DS`、`MX`、
-`NAPTR`、`PTR`、`SRV`、`TLSA`、`TXT`（其他类型会在发出任何调用之前被拒绝）。TTL 会被限制在 1..86400 范围内，结果中返回实际发送的大写类型和 TTL。
-当 `apply = true`（php-dna 的默认值）时，更改会立即提交；若该提交失败，则返回其错误信封（更改仍处于暂存状态）。
-由于网关会对突发请求进行限流，连续的区域调用之间至少间隔一秒。
-
-```go
-// 列表：每个值一行，名称为完全限定名
-client.GetResourceRecords("example.com")
-
-// 将某个名称+类型设置为恰好这些值（空列表会删除该记录集）。默认值：ttl 3600，apply true
-client.SetResourceRecordSet("example.com", "@", "MX", []string{"10 mx1.example.com", "20 mx2.example.com"}, 3600, true)
-
-// 添加 / 替换 / 删除单个值，保留其他值（ttl nil = 保留记录集的 TTL）
-client.AddResourceRecordValue("example.com", "www", "A", "192.0.2.10", nil, true)
-client.ReplaceResourceRecordValue("example.com", "www", "A", "192.0.2.10", "192.0.2.11", nil, true)
-client.RemoveResourceRecordValue("example.com", "www", "A", "192.0.2.11", true)
-
-// 删除整个名称+类型（knownValue "" = 先查询一个当前值）
-client.DeleteResourceRecordSet("example.com", "www", "A", true, "")
-
-// 底层调用（content 为字符串或 []string）
-client.AddResourceRecord("example.com", "api", "CNAME", "example.com.", 300, false)
-client.EditResourceRecord("example.com", "api", "api", "CNAME", "www.example.com.", 300, false)
-client.DeleteResourceRecord("example.com", "old.example.com.", "192.0.2.99", "A", false)
-client.ApplyResourceRecords("example.com")
-```
-
-<details>
-<summary>DNS 区域管理示例输出</summary>
-
-```go
-// GetResourceRecords
-map[string]any{"result": "OK", "data": map[string]any{"records": []any{
-	map[string]any{"Name": "example.com.", "Type": "A", "TTL": int64(3600), "Content": "192.0.2.1", "Disabled": false},
-	map[string]any{"Name": "www.example.com.", "Type": "CNAME", "TTL": int64(300), "Content": "example.com.", "Disabled": false},
-}}}
-
-// SetResourceRecordSet, AddResourceRecordValue, ReplaceResourceRecordValue, RemoveResourceRecordValue
-map[string]any{"result": "OK", "data": map[string]any{
-	"Name": "", "Type": "MX", "TTL": int64(3600), "Contents": []any{"10 mx1.example.com", "20 mx2.example.com"},
-}}
-
-// 值已存在 / 不存在：不写入任何内容
-map[string]any{"result": "OK", "data": map[string]any{"Name": "", "Type": "MX", "Contents": []any{"..."}, "Changed": false}}
-
-// 对不存在的记录集调用 DeleteResourceRecordSet
-map[string]any{"result": "OK", "data": map[string]any{"Name": "nothing", "Type": "A", "Removed": false}}
-
-// AddResourceRecord / EditResourceRecord
-map[string]any{"result": "OK", "data": map[string]any{"Name": "api", "Type": "CNAME", "TTL": int64(300), "Content": "example.com."}}
-
-// DeleteResourceRecord
-map[string]any{"result": "OK", "data": map[string]any{"Name": "old.example.com.", "Type": "A", "Content": "192.0.2.99"}}
-
-// ApplyResourceRecords
-map[string]any{"result": "OK", "data": map[string]any{"DomainName": "example.com"}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
 
 ### URL 转发
 
 ```go
-client.SetForwarding("example.com", "https://www.example.org", "Standard") // 或 "Frame"（隐藏式）
-client.GetForwarding("example.com")
-client.DeleteForwarding("example.com")
+err = client.Domains.SetForwarding(ctx, "example.com", "https://www.example.org", dna.ForwardTypeStandard)
+f, err := client.Domains.Forwarding(ctx, "example.com") // 域名没有转发时为 nil
+err = client.Domains.DeleteForwarding(ctx, "example.com")
 ```
 
-<details>
-<summary>URL 转发示例输出</summary>
+### 注册局文档 (.tr)
 
 ```go
-// SetForwarding
-map[string]any{"result": "OK", "data": map[string]any{"RedirectAddress": "https://www.example.org", "ForwardType": "Standard"}}
-
-// GetForwarding
-map[string]any{"result": "OK", "data": map[string]any{"Enabled": true, "RedirectAddress": "https://www.example.org", "ForwardType": "Standard"}}
-
-// 未配置任何转发时的 GetForwarding
-map[string]any{"result": "OK", "data": map[string]any{"Enabled": false, "RedirectAddress": "", "ForwardType": ""}}
-
-// DeleteForwarding（未配置任何转发时 Removed 为 false）
-map[string]any{"result": "OK", "data": map[string]any{"DomainName": "example.com", "Removed": true}}
+doc, err := dna.DocumentFromFile(dna.DocumentTypeIdentityCard, "id.pdf")
+res, err := client.Domains.UploadDocuments(ctx, "example.com.tr", doc)
+page, err := client.Domains.Documents(ctx, dna.DomainDocumentsListRequest{DomainName: "example.com.tr"})
 ```
 
-</details>
+文件会自动进行 base64 编码；上传前会检查格式（PDF、JPG、PNG、DOC、DOCX、ODT）和大小（每个文件 10 MB，每次
+请求 50 MB）。
 
-只有网关返回 "Redirect information not found" 时才表示"未配置"；其他任何错误（例如未知域名）都会作为错误返回。
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 实用工具（无网络访问）
+### SSL 证书
 
 ```go
-client.IsTrTLD("example.com.tr") // true
-
-client.ValidateContact(map[string]any{"FirstName": " Jo ", "Phone": "+90 (532) 374 33 88", "Country": "Turkey"})
-// map[string]any{"FirstName": "Jo", "LastName": "Jo", "AddressLine1": "Addres yok", "City": "ISTANBUL",
-//   "State": "ISTANBUL", "Country": "TR", "ZipCode": "34000", "Phone": "5323743388",
-//   "PhoneCountryCode": "90", "Fax": "", "FaxCountryCode": ""}
+csr, err := client.SSL.GenerateCSR(ctx, dna.SSLGenerateCSRRequest{
+	DomainName: "example.com", Country: "TR", State: "Istanbul", Locality: "Istanbul",
+	Organization: "Example Ltd", OrganizationUnit: "IT",
+})
+_, err = client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // 从余额中扣费
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
+	DomainName: "example.com", CSR: csr.CSR, ApproverMail: "admin@example.com",
+	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
+})
+st, err := client.SSL.Status(ctx, "example.com") // 轮询直到 st.IsIssued
+cert, err := client.SSL.Content(ctx, "example.com")
+os.WriteFile("example.com.crt", []byte(cert.Chain()), 0o644)
 ```
 
-`ValidateContact` 会用占位值填充缺失字段，删除姓名中的数字和标点符号，在缺少 State 时回退使用 City，
-将常见的国家名称映射为 ISO 代码，并将电话和传真号码拆分为号码和国家代码。带有自身国际前缀的号码（`+44 20 ...`、`0044 20 ...`）
-即使另外提供了其他国家代码，也会保留其自身的国家代码。
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### 诊断
+### 主机托管
 
 ```go
-client.GetRequestData()        // 上一次调用的 {"url": ..., "method": ..., "payload": ...}
-client.GetResponseData()       // 上一次解码的响应，或 {"raw_response": body}
-client.GetResponseHeaders()    // {"url", "http_code", "content_type", "total_time", "headers"}
-client.GetParsedResponseData() // 上一次解析的响应，或 {Code, Message, Details} 错误
-client.GetLastFunction()       // 例如 "request:GET domains/info"
-client.GetServiceURL()         // 网关基础 URL
-client.SetServiceURL("https://ote.domainresellerapi.com/api/v1")
+packages, err := client.Hosting.Packages(ctx)
+created, err := client.Hosting.Create(ctx, "example.com", "Linux-Starter") // 从余额中扣费
+
+ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+defer cancel()
+st, err := client.Hosting.Wait(ctx, created.ServiceID) // 轮询直到激活
+fmt.Println(st.PanelAddress, st.Username, st.Password)
 ```
 
-`Client` 会保存这些每次调用的状态，因此不要在多个 goroutine 之间共享同一个 `Client`；请为每个 goroutine
-创建一个。
+对于仍在开通中的主机托管，切勿再次调用 `Create`：这会重复扣费。
 
-## 错误处理
-
-- 网关错误返回 `Code: "API_<HTTP status>"`。当网关发送了自己的错误代码
-  （例如 `Dna.DomainService:Domain:10007`）时，该代码会作为 `GatewayCode` 添加，以便调用方区分
-  "域名未找到"与"不支持该 TLD"。消息来自网关；空的错误响应体会变为
-  `HTTP 429 - Too Many Requests`（以此类推），验证错误会在 `Details` 中逐字段列出
-  （`Admin PostalCode - 'PostalCode' is required`），而 `Exception of type '...' was thrown` 之类的后端
-  模板化信息会被替换为网关的详细信息，或替换为一条注明错误代码的固定消息 — 绝不会替换为原始响应体。
-- 301/302 响应表示凭据被拒绝：`Message: "Invalid API credentials"`。
-- 传输故障（超时、DNS、TLS、连接重置）都会作为错误返回，绝不会是空的成功结果。超时返回
-  `Code: "CURL_28"` 和 `Could not reach the DomainNameAPI service: the connection
-  timed out. (...)`；其他故障使用 curl 风格的编号（`CURL_6` DNS、`CURL_7` 连接、
-  `CURL_35` TLS、`CURL_56` 重置、`CURL_60` 证书）以及 `Curl error during request: ...`。
-  `API_<n>` 专用于 HTTP 状态码。
-- 注册、转移和续费返回 HTTP 200 且 `"success": false` 时视为被拒绝：
-  返回 `REGISTER_DOMAIN`、`TRANSFER_DOMAIN` 或 `RENEW_DOMAIN`，并附带网关的消息。
-- 空的或 `null` 的成功响应体返回 `Code: "RESPONSE"`。
-- 超时设置：每次调用 30 秒，建立连接 10 秒。
-
-## 测试模式
-
-将 `true`（或 `"true"`、`"1"`、`"on"`、`"yes"`）作为构造函数的第三个参数传入，即可使用 OTE
-测试网关 `https://ote.domainresellerapi.com/api/v1`。测试模式下的遥测数据会被标记为
-`environment: ote`。
-
-## 遥测（错误报告）
-
-当 API 调用失败时，本库可以向 DomainNameAPI 自己的错误跟踪系统（Sentry）发送一份错误报告。
-成功调用中会随机抽取一小部分（4%，另外所有耗时超过 1 秒的调用）作为性能记录发送。错误报告**默认开启**。
-
-**发送的内容：** 错误代码和消息；端点路径和 HTTP 方法；调用耗时；库名称
-（`DomainNameAPI-Go`）、库版本和 Go 版本；经销商 ID（Reseller ID）和域名；服务器的公网 IP 地址
-（通过 `api.ipify.org` 获取）；操作系统用户名；包括联系人信息在内的 API 请求和响应。仅凭据会被遮蔽：
-EPP/auth 代码、API 密钥、密码和令牌（token）会被替换为 `***`。
-
-**绝不会发送的内容：** 可读形式的 EPP/auth 代码、API 密钥、密码或令牌（token）；堆栈跟踪（stack trace）
-中的函数调用参数。
-
-**用途和保留期限：** 数据仅用于使用情况统计和问题的早期诊断，在 DomainNameAPI 自己的 Sentry 服务器上
-保留 30 天。
-
-**关闭，或仅发送最少信息：**
+### 余额、价格与订单
 
 ```go
-client := dna.New(resellerID, apiKey, false)
-client.SetErrorReportingEnabled(false) // 不发送任何内容
+account, err := client.Account.Get(ctx)
+usd, _ := account.Balance("USD")
 
-client.SetTelemetryMinimal(true) // 仅发送错误代码/消息、端点、耗时、版本和经销商 ID
+for tx, err := range client.Account.AllTransactions(ctx, dna.AccountTransactionsRequest{From: monthStart}) {
+	if err != nil {
+		return err
+	}
+	fmt.Println(tx.CreationTime, tx.Type, tx.Change())
+}
+
+if tld, err := client.Products.TLD(ctx, "com.tr"); err == nil && tld != nil {
+	price, _ := tld.RegisterPrice(1)
+	fmt.Println(tld.Name, price)
+}
+
+info, err := client.Products.Info(ctx, "com", dna.OrderRenew, 2) // .com 续费 2 年的价格
+order, err := client.Orders.Get(ctx, "ORDER-CODE")
 ```
 
-遥测在后台运行，绝不会长时间阻塞调用，也绝不会在您的代码中引发 panic。
+## 请求与 BaseRequest
 
-> 🔒 **安全：** TLS 证书验证处于开启状态。在 CA 证书包过时的主机上，可以通过
-> `client.SetSSLVerification(false)` 将其关闭 — 不推荐；更新 CA 证书包才是更好的解决办法。
-
-## 高级选项
+每个 API 操作都是一个请求类型：`DomainInfoRequest`、`DNSAddRequest`、`SSLConfigureRequest` 等。它们
+都实现同一个接口：
 
 ```go
-client := dna.New(resellerID, apiKey, false,
-	dna.WithHTTPClient(myHTTPClient),      // 任何实现 Do(*http.Request) (*http.Response, error) 的类型
-	dna.WithSentryDSN("https://key@host/1"),
-	dna.WithTelemetryClient(myHTTPClient),
-)
+type Request interface {
+	Endpoint() Endpoint      // 方法、路径和安全级别
+	Query() url.Values       // 查询字符串，或 nil
+	Body() any               // JSON 请求体，或 nil
+	Validate() error         // 在发送任何内容之前检查
+}
 ```
 
-使用自定义 HTTP 客户端时，请在其上配置超时、代理和 TLS；它不得跟随重定向
-（请在 `CheckRedirect` 中返回 `http.ErrUseLastResponse`）。
+Go 没有继承，所以“基类”是一个被内嵌的结构体。`dna.BaseRequest` 提供默认实现（无
+查询、无请求体、无需校验）；请求通过在自己的类型上定义同名方法来覆盖默认实现。只有
+`Endpoint` 没有默认实现。本包中的一个请求如下所示：
 
-## 测试
+```go
+type DomainRenewRequest struct {
+	BaseRequest
+	DomainName string
+	Years      int
+}
 
-主机上无需安装 Go，有 Docker 即可：
+func (DomainRenewRequest) Endpoint() Endpoint {
+	return Endpoint{Method: http.MethodPost, Path: "/api/v1/domains/renew", Safety: Billable}
+}
+
+func (r DomainRenewRequest) Body() any { return domainBody(r.DomainName).set("period", r.Years) }
+
+func (r DomainRenewRequest) Validate() error {
+	var v validator
+	v.required("domainName", r.DomainName)
+	v.check(r.Years >= 1 && r.Years <= 10, "years", "must be between 1 and 10")
+	return v.err()
+}
+```
+
+服务方法会为你构建这些请求。`client.Do` 可以发送任何 `Request`，包括你自己的类型，例如
+只读取所需的字段，或调用本包尚未封装的端点：
+
+```go
+type ExpiryRequest struct {
+	dna.BaseRequest
+	DomainName string
+}
+
+func (ExpiryRequest) Endpoint() dna.Endpoint {
+	return dna.Endpoint{Method: http.MethodGet, Path: "/api/v1/domains/info", Safety: dna.Read}
+}
+
+func (r ExpiryRequest) Query() url.Values { return url.Values{"DomainName": {r.DomainName}} }
+
+var out struct {
+	ExpirationDate dna.Time `json:"expirationDate"`
+}
+resp, err := client.Do(ctx, ExpiryRequest{DomainName: "example.com"}, &out)
+```
+
+你的请求享有内置请求的全部能力：凭据、重试、节奏控制、错误规范化、
+关联 ID、追踪以及只读强制。`client.NewHTTPRequest(ctx, req)` 会构建出确切的 HTTP
+请求但不发送，便于在计费请求发出之前记录或审查。
+
+## 错误
+
+| 错误                   | 触发时机                                                   | 常用字段                                                         |
+|------------------------|------------------------------------------------------------|------------------------------------------------------------------|
+| `*dna.InputError`      | `Validate` 拒绝了请求；**没有发送任何内容**                | `Request`, `Fields`                                              |
+| `*dna.APIError`        | API 返回了非 2xx 状态码                                    | `StatusCode`, `Code`, `Message`, `Details`, `Fields`, `Data`, `CorrelationID`, `Hint()` |
+| `*dna.OperationError`  | API 返回 2xx，但带有 `"success": false`                    | `Code`, `Message`, `CorrelationID`                               |
+| `*dna.NetworkError`    | 请求未完成（DNS、TLS、超时、连接重置）                     | `Err`, `Timeout()`                                               |
+| `dna.ErrReadOnly`      | 只读客户端阻止了变更；没有发送任何内容                     | 使用 `errors.Is`                                                 |
+
+`dna.KindOf(err)` 可对其中任何一种进行分类：`KindAuth`、`KindNotFound`、`KindValidation`、`KindRejected`、
+`KindConflict`、`KindRateLimited`、`KindServer`、`KindNetwork`、`KindInvalidInput`、`KindReadOnly`。辅助函数
+可回答常见问题：
+
+```go
+_, err := client.Domains.Renew(ctx, "example.com", 1)
+var apiErr *dna.APIError
+switch {
+case err == nil:
+case dna.OutcomeUnknown(err):
+	// 续费可能已经成功。再次尝试之前先检查该域名。
+case dna.IsInsufficientBalance(err):
+case dna.IsNotFound(err):
+case dna.HasCode(err, dna.CodePrivacyNotSupported):
+case errors.As(err, &apiErr):
+	log.Println(apiErr.Code, apiErr.Message, apiErr.Hint(), apiErr.CorrelationID)
+}
+```
+
+请根据 `Code` 而不是 `Message` 来分支处理：消息是本地化的。API 错误码形如
+`Dna.DomainService:Domain:10007`；参见[错误参考](https://www.domainnameapi.com/docs/reference/errors.md)。
+联系支持团队时请提供 `CorrelationID`。
+
+## 安全与可靠性
+
+- **安全级别。** 每个请求都属于 `Read`、`Write`、`Destructive` 或 `Billable`（`req.Endpoint().Safety`）。
+  部分 POST 和 PUT 请求实际上是读取操作（`DomainSearchRequest`、`SSLStatusRequest`）。
+- **只读模式。** `dna.WithReadOnly()` 会阻止所有非读取操作，适用于报表任务，也适合
+  安全地探索生产环境。
+- **重试。** 429 响应总是会被重试，并遵循 `Retry-After`：API 在处理任何内容之前就拒绝了这类请求。
+  网络错误和 502/503/504 仅对读取操作和幂等的写入操作重试，因此注册
+  或续费绝不会被发送两次。计费请求失败后，请检查 `dna.OutcomeUnknown(err)`。
+- **节奏控制。** 客户端会控制请求间隔，使其低于每个密钥的限制（每秒 5 个请求、每秒 2 次搜索、
+  每秒一次区域调用）。如果你自行控制节奏，可用 `dna.WithPacing(false)` 将其关闭。
+- **配额。** `Response.Quota` 暴露软配额响应头。超出限制时，API 会放慢响应（最多
+  5 秒）而不是拒绝请求；默认的 60 秒超时为此留有余地。
+- **关联 ID。** 每个请求都带有 `X-Correlation-ID`。可用
+  `dna.WithCorrelationID(ctx, id)` 设置你自己的值，以便将 API 调用与你的日志关联起来。
+- **可观测性。** `dna.WithLogger(slog.Default())` 会记录每次交互；`dna.WithTrace(func(dna.TraceEvent))`
+  会把每个请求、响应和重试交给你，用于指标或错误上报。其中绝不包含 API key。
+- **并发。** `Client` 可并发安全使用。创建一个并共享即可。
+- **宽容的解码。** 不带时区的日期、`null`、用 `[]` 代替 `{}`、数字或名称形式的状态，以及
+  任意大小写的角色（`"registrant"`、`"ADMINISTRATIVE"`）都可以解码。
+
+## 客户端选项
+
+| 选项                            | 作用                                                                                     |
+|---------------------------------|------------------------------------------------------------------------------------------|
+| `WithEnvironment(dna.OTE)`      | 使用测试环境（默认为 `dna.Production`）                                                  |
+| `WithBaseURL(url)`              | 将请求发送到代理或测试服务器                                                             |
+| `WithHTTPClient(hc)`            | 使用你自己的 `*http.Client`（传输层、代理、TLS）；绝不会跟随重定向                       |
+| `WithTimeout(d)`                | 每次尝试的超时时间（默认 60 s）                                                          |
+| `WithUserAgent("app/1.0")`      | 将你的产品名放在 User-Agent 前面                                                         |
+| `WithCurrency("TRY")`           | 搜索价格与目录价格的币种                                                                 |
+| `WithRetries(n)`                | 重试次数（默认 2）                                                                       |
+| `WithPacing(false)`             | 关闭客户端节奏控制                                                                       |
+| `WithReadOnly()`                | 阻止所有非读取请求                                                                       |
+| `WithLogger(l)`                 | 将交互记录到 `*slog.Logger`                                                              |
+| `WithTrace(fn)`                 | 观察每个请求、响应和重试                                                                 |
+
+## 测试你的代码
+
+将客户端指向一个 `httptest.Server`；其他部分都不需要 mock：
+
+```go
+srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprint(w, `{"success":true,"info":{"domainName":"example.com","status":"AVAILABLE","price":11.99,"currency":"USD"}}`)
+}))
+defer srv.Close()
+
+client, _ := dna.NewClient("reseller-id", "api-key", dna.WithBaseURL(srv.URL), dna.WithPacing(false))
+a, err := client.Domains.Search(ctx, "example.com")
+```
+
+## 从 v1 迁移
+
+v2 是全新的设计：用类型化的结果取代 `map[string]any`，用 error 取代 `{"result": "ERROR"}`
+信封，并提供完整的 API，而不再只是 php-dna 的方法集合。模块路径已更改为
+`github.com/domainreseller/go-dna/v2`，因此在你切换之前，v1 仍可继续使用。
+
+| v1                                                  | v2                                                                     |
+|-----------------------------------------------------|------------------------------------------------------------------------|
+| `dna.New(id, key, true)`                            | `dna.NewClient(id, key, dna.WithEnvironment(dna.OTE))`                 |
+| `res["result"] == "OK"`                             | `err == nil`                                                           |
+| `GetResellerDetails`, `GetCurrentBalance`           | `Account.Get` (+ `Account.Balance("USD")`)                             |
+| `CheckAvailability`                                 | `Domains.Search`, `Domains.BulkSearch`                                 |
+| `GetList`                                           | `Domains.List`, `Domains.All`                                          |
+| `GetTldList`                                        | `Products.TLDs`, `Products.AllTLDs`, `Products.TLD`                    |
+| `GetDetails`, `GetContacts`, `SyncFromRegistry`     | `Domains.Info`                                                         |
+| `RegisterWithContactInfo`                           | `Domains.RegisterWithContacts`（或 `Contacts.Create` + `Domains.Register`） |
+| `Renew`, `Transfer`, `CheckTransfer`                | `Domains.Renew`, `Domains.Transfer`, `Domains.TransferCheck`           |
+| `ModifyNameServer`                                  | `Domains.SetNameServers`                                               |
+| `EnableTheftProtectionLock` / `Disable...`          | `Domains.Lock` / `Domains.Unlock`                                      |
+| `ModifyPrivacyProtectionStatus`                     | `Domains.SetPrivacy`                                                   |
+| `SaveContacts`                                      | `Domains.UpdateContacts`, `Domains.SetContactHandles`                  |
+| `AddChildNameServer`, `ModifyChildNameServer`, `DeleteChildNameServer` | `Domains.AddHost`, `Domains.UpdateHost`, `Domains.DeleteHost` |
+| `GetResourceRecords`                                | `DNS.List`                                                             |
+| `AddResourceRecord`, `AddResourceRecordValue`       | `DNS.Add`                                                              |
+| `EditResourceRecord`, `SetResourceRecordSet`, `ReplaceResourceRecordValue` | `DNS.Update`                                    |
+| `DeleteResourceRecord`, `RemoveResourceRecordValue`, `DeleteResourceRecordSet` | `DNS.Delete`（每个值调用一次）              |
+| `ApplyResourceRecords`                              | `DNS.Apply`                                                            |
+| `GetForwarding`, `SetForwarding`, `DeleteForwarding`| `Domains.Forwarding`, `Domains.SetForwarding`, `Domains.DeleteForwarding` |
+| `CancelTransfer`, `ApproveTransfer`, `RejectTransfer` | 不在已发布的 API 中；如果你的账户支持这些操作，请发送[你自己的请求](#请求与-baserequest) |
+| `IsTrTLD`, `ValidateContact`                        | `strings.HasSuffix(name, ".tr")`；每个请求都会执行校验                 |
+| `GetRequestData`, `GetResponseData`, ...            | `WithTrace`, `WithLogger`, 来自 `client.Do` 的 `Response`               |
+| 遥测 (`SetErrorReportingEnabled`, Sentry)      | 已移除：不会有任何数据离开你的进程；请将 `WithTrace` 事件转发到你自己的上报系统 |
+| `SetSSLVerification(false)`                         | `WithHTTPClient` 搭配你自己的 TLS 设置                                 |
+
+## 开发
 
 ```bash
-docker run --rm -v "$PWD":/src -w /src golang:1.23 go test ./...
-docker run --rm -v "$PWD":/src -w /src golang:1.23 go vet ./...
+go test ./...          # 单元测试；均不访问网络
+go vet ./...
+gofmt -l .
 ```
 
-测试套件包含针对 HTTP 层、错误映射、遥测和实用工具的单元测试，以及一个一致性测试，该测试会回放
-`testdata/conformance` 中全部 134 个 php-dna 测试用例（线上请求和返回值必须与 php-dna 完全一致）。
-没有任何测试会访问网络。
+`testdata/openapi.json` 是 API 的 OpenAPI 文档。测试会对照它检查每个请求类型（方法、
+路径、查询参数名、请求体字段、必填字段）、每个响应类型的 JSON 字段名是否符合响应
+schema，以及每个枚举值；当 API 新增了没有对应请求类型的操作时，测试会失败。更新方法：
 
-## 返回和错误代码及说明
+```bash
+curl -fsSL -A "go-dna-spec-update" -o testdata/openapi.json https://api.domainresellerapi.com/swagger/v1/swagger.json
+go test ./...
+```
 
-| 代码 | 描述 | 详细 |
-|------|------|------|
-| 1000 | 命令成功完成 | 操作成功。 |
-| 1001 | 命令成功完成；操作待处理 | 操作成功。但是，操作当前已排队等待完成。 |
-| 2003 | 缺少必需参数 | 参数缺失错误。例如：联系信息中没有电话输入。 |
-| 2105 | 对象不符合续费条件 | 域名状态不适合续费，已锁定更新操作。状态不应为"clientupdateprohibited"。可能由于其他状态条件。 |
-| 2200 | 身份验证错误 | 授权错误，安全代码不正确或域名在另一个注册商处注册。 |
-| 2302 | 对象已存在 | 域名或名称服务器信息已存在于数据库中。无法注册。 |
-| 2303 | 对象不存在 | 域名或名称服务器信息在数据库中不存在。需要新注册。 |
-| 2304 | 对象状态禁止操作 | 域名状态不适合更新，已锁定更新操作。状态不应为"clientupdateprohibited"。可能由于其他状态条件。 |
+本仓库的约定请参见 [AGENTS.md](AGENTS.md)。
 
-库代码：`RESPONSE`（空响应）、`CREDENTIALS`（账户端点返回的响应格式无效）、`AVAILABILITY`（未提供域名）、
-`BALANCE`（账户未报告该货币）、`TRANSFER_NOT_AVAILABLE`、`REGISTER_DOMAIN` / `TRANSFER_DOMAIN` /
-`RENEW_DOMAIN`（网关拒绝了该操作）、`DOMAIN_RENEW`（续费时缺少到期日期）、`ADD_ZONE`、`EDIT_ZONE`、`SET_ZONE`、
-`DELETE_ZONE`（不支持的记录类型或未找到该值）、`SET_FORWARD`（不支持的转发类型或地址为空）、
-`CURL_<n>`（传输故障）、`API_<status>`（HTTP 错误，当网关发送了自己的代码时附带 `GatewayCode`）。
+## 支持
+
+- API 文档：<https://www.domainnameapi.com/docs/>
+- CLI 与 MCP 服务器：<https://github.com/domainreseller/cli>
+- 网站：<https://www.domainnameapi.com>
 
 ## 许可证
 
-Apache License 2.0 — 参见 [LICENSE](LICENSE)。
+Apache License 2.0。参见 [LICENSE](LICENSE)。

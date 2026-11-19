@@ -1,7 +1,7 @@
 <div align="center">
-  <a href="README-TR.md"   >   TR <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/TR.png" alt="TR" height="20" /></a>
+  <a href="README-TR.md">TR <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/TR.png" alt="TR" height="20" /></a>
   <a href="README.md"> | EN <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/US.png" alt="EN" height="20" /></a>
-   <a href="README-DE.md"> | DE <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/DE.png" alt="DE" height="20" /></a>
+  <a href="README-DE.md"> | DE <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/DE.png" alt="DE" height="20" /></a>
   <a href="README-SA.md"> | SA <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/SA.png" alt="AR" height="20" /></a>
   <a href="README-NL.md"> | NL <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/NL.png" alt="NL" height="20" /></a>
   <a href="README-AZ.md"> | AZ <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/AZ.png" alt="AZ" height="20" /></a>
@@ -10,1004 +10,554 @@
   <a href="README-IT.md"> | IT <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/IT.png" alt="IT" height="20" /></a>
 </div>
 
-# go-dna — DomainNameAPI-client voor Go
+# go-dna: de Go SDK voor de Domain Name API
 
-Go-client voor de REST API van domeinregistrar DomainNameAPI. Het is een getrouwe port van
-[php-dna](https://github.com/domainreseller/php-dna): dezelfde methoden, dezelfde verzoeken over de
-lijn en dezelfde retourwaarden. De standaardbibliotheek is de enige afhankelijkheid.
+[![Go Reference](https://pkg.go.dev/badge/github.com/domainreseller/go-dna/v2.svg)](https://pkg.go.dev/github.com/domainreseller/go-dna/v2)
+[![CI](https://github.com/domainreseller/go-dna/actions/workflows/ci.yml/badge.svg)](https://github.com/domainreseller/go-dna/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-## 📦 Downloaden — gebruik altijd de Releases!
+Getypeerde Go-client voor de reseller-REST-API van de [Domain Name API](https://www.domainnameapi.com): domeinen
+zoeken, registreren, verlengen en verhuizen, DNS, DNSSEC, contacten, SSL-certificaten, hosting, bestellingen, de
+productcatalogus en je saldo.
 
-⬇️ **Download hier de nieuwste geteste versie: https://github.com/domainreseller/go-dna/releases/latest**
+- **Alle 64 API-operaties**, op dezelfde manier gegroepeerd als in de [`dna` CLI](https://github.com/domainreseller/cli):
+  `dna domain info` is `client.Domains.Info`, `dna dns add` is `client.DNS.Add`.
+- **Getypeerde resultaten en enums**: `d.Status == dna.DomainStatusPendingDelete`, `d.ExpirationDate.Before(...)`,
+  geen `map[string]any`.
+- **Elke operatie is een request-type** dat `dna.BaseRequest` embedt en zichzelf valideert voordat er iets
+  wordt verstuurd. Eigen requests schrijf je op dezelfde manier.
+- **Standaard veilig**: kostenplichtige requests worden nooit blind herhaald, `WithReadOnly` blokkeert
+  wijzigingen, de client remt zichzelf af onder de rate limits en is veilig voor gelijktijdig gebruik.
+- **Alleen de standaardbibliotheek.** Go 1.23 of nieuwer.
 
-> ⚠️ Gebruik **niet** de groene knop **Code → Download ZIP** — daarmee downloadt u de ruwe ontwikkelbranch. Releasepakketten zijn voorzien van een versienummer, getest en klaar voor productie.
+```go
+client, _ := dna.NewClient(resellerID, apiKey, dna.WithEnvironment(dna.OTE))
 
-## Vereisten
+a, err := client.Domains.Search(ctx, "example.com")
+if err == nil && a.Available() {
+	fmt.Printf("%s is available for %.2f %s\n", a.DomainName, a.Price, a.Currency)
+}
+```
 
-- Go 1.21 of hoger
-- Geen pakketten van derden (alleen `net/http` en `encoding/json` uit de standaardbibliotheek)
+## Inhoud
+
+- [Installatie](#installatie)
+- [Inloggegevens en omgevingen](#inloggegevens-en-omgevingen)
+- [Services](#services)
+- [Gebruik](#gebruik)
+- [Requests en BaseRequest](#requests-en-baserequest)
+- [Fouten](#fouten)
+- [Veiligheid en betrouwbaarheid](#veiligheid-en-betrouwbaarheid)
+- [Client-opties](#client-opties)
+- [Je code testen](#je-code-testen)
+- [Migreren van v1](#migreren-van-v1)
+- [Ontwikkeling](#ontwikkeling)
 
 ## Installatie
 
-Leg met Go modules een uitgebrachte versie vast:
+```bash
+go get github.com/domainreseller/go-dna/v2
+```
+
+```go
+import dna "github.com/domainreseller/go-dna/v2"
+```
+
+Uitvoerbare programma's staan in [examples](examples): `quickstart`, `register`, `expiring`, `dns`, `ssl` en
+`custom-request`.
 
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.1
+go run ./examples/quickstart example.com
 ```
+
+## Inloggegevens en omgevingen
+
+Je hebt twee API-inloggegevens nodig uit het resellerpaneel (**API settings**). De inloggegevens van het paneel werken niet.
+
+| Inloggegevens | Ziet eruit als                         |
+|---------------|----------------------------------------|
+| Reseller ID   | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
+| API key       | een lange geheime tekenreeks           |
+
+Er zijn twee omgevingen. **Begin met OTE**, de testomgeving: die heeft eigen gegevens en een eigen API-sleutel,
+en niets wat je daar doet kost geld of raakt live domeinen.
 
 ```go
-import dna "github.com/domainreseller/go-dna"
+// Testomgeving (OTE)
+client, err := dna.NewClient(resellerID, oteAPIKey, dna.WithEnvironment(dna.OTE))
+
+// Productie (de standaard): echte registraties, echte afschrijvingen
+client, err := dna.NewClient(resellerID, apiKey)
 ```
 
-De pakketnaam is `dna`. Uitvoerbare voorbeelden voor elke methode staan in de map [examples](examples):
+`NewClientFromEnv` leest dezelfde variabelen als de `dna` CLI:
 
-```bash
-go run ./examples/GetDetails
-```
-
-## 🔑 API-inloggegevens — Reseller ID en API Key
-
-De bibliotheek heeft precies twee inloggegevens nodig, die aan de constructor worden meegegeven:
-
-| Parameter | Waarde |
-|---|---|
-| Eerste | Reseller ID — UUID zoals `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
-| Tweede | API Key |
-
-> 💡 U vindt uw **Reseller ID** en **API Key** in uw DomainNameAPI-paneel onder **API-instellingen**.
-> ⚠️ Dit zijn **API-inloggegevens** — de inloggegevens van uw paneel werken hier **niet**.
+| Variabele         | Betekenis                                                     |
+|-------------------|---------------------------------------------------------------|
+| `DNA_RESELLER_ID` | reseller ID                                                   |
+| `DNA_API_KEY`     | API-sleutel van de gekozen omgeving                           |
+| `DNA_ENV`         | `production` (standaard) of `ote`                             |
+| `DNA_TEST_MODE`   | `true` kiest OTE (zoals in de andere DomainNameAPI-SDK's)     |
+| `DNA_BASE_URL`    | een eigen basis-URL, bijv. een proxy                          |
 
 ```go
-resellerID := "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-apiKey := "your-api-key"
-
-// Live-omgeving
-client := dna.New(resellerID, apiKey, false)
-
-// Test-omgeving (OTE)
-client = dna.New(resellerID, apiKey, true)
+client, err := dna.NewClientFromEnv(dna.WithUserAgent("my-panel/1.4"))
 ```
 
-Van beide inloggegevens worden spaties aan begin en eind verwijderd. Het derde argument accepteert
-ook de strings die panelen voor selectievakjes opslaan: `"true"`, `"1"`, `"on"` en `"yes"`
-(hoofdletterongevoelig) kiezen de testomgeving, al het andere (`"false"`, `"0"`, `"off"`, `""`, ...)
-kiest de live-omgeving.
+Een verkeerde sleutel of omgeving mislukt bij de eerste request met een `*APIError` van het soort `KindAuth` en een hint;
+`client.Account.Get(ctx)` is de goedkoopste manier om dit te controleren.
 
-## Snel aan de slag
+## Services
 
-```go
-package main
+| Service           | CLI-groep     | Operaties                                                                                                                                                         |
+|-------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `client.Account`  | `dna account` | `Get`, `Transactions`, `AllTransactions`                                                                                                                          |
+| `client.Contacts` | `dna contact` | `Get`, `Create`, `Update`, `Verification`, `ResendVerification`                                                                                                   |
+| `client.Domains`  | `dna domain`  | `Search`, `BulkSearch`, `List`, `All`, `Info`, `Register`, `RegisterWithContacts`, `Renew`, `RenewCheck`, `Restore`, `Transfer`, `TransferCheck`, `TransferStatus`, `Lock`, `Unlock`, `SetPrivacy`, `UpdateAuthCode`, `SetNameServers`, `AddHost`, `UpdateHost`, `DeleteHost`, `UpdateContacts`, `SetContactHandles`, `Documents`, `UploadDocuments`, `Forwarding`, `SetForwarding`, `DeleteForwarding` |
+| `client.DNS`      | `dna dns`     | `List`, `Add`, `Update`, `Delete`, `Apply`                                                                                                                        |
+| `client.DNSSEC`   | `dna dnssec`  | `Get`, `Add`, `Remove`, `Disable`                                                                                                                                 |
+| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Approvers`, `Revoke`                                                |
+| `client.Hosting`  | `dna hosting` | `Packages`, `Plans`, `Create`, `Wait`, `Get`, `GetByToken`, `Status`                                                                                              |
+| `client.Orders`   | `dna order`   | `Get`                                                                                                                                                             |
+| `client.Products` | `dna product` | `List`, `Info`, `TLDs`, `AllTLDs`, `TLD`, `SSLs`                                                                                                                  |
 
-import (
-	"fmt"
-
-	dna "github.com/domainreseller/go-dna"
-)
-
-func main() {
-	client := dna.New("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "your-api-key", false)
-
-	result := client.GetDetails("example.com")
-	if result["result"] != "OK" {
-		e := result["error"].(map[string]any)
-		fmt.Println("Error:", e["Code"], e["Message"], e["Details"])
-		return
-	}
-	data := result["data"].(map[string]any)
-	fmt.Println(data["DomainName"], data["Status"], data["Dates"].(map[string]any)["Expiration"])
-}
-```
-
-## Retourwaarden
-
-Methoden retourneren dezelfde dynamische structuren als php-dna — `map[string]any` en `[]any` — en
-geen getypeerde modellen, zodat de sleutels, string-vlaggen (`"true"`/`"false"`) en opgemaakte
-geldbedragen (`"11.9900"`) exact overeenkomen met die van php-dna. Getallen van de gateway zijn
-`int64` of `float64`.
-
-Geslaagde aanroepen zien er zo uit:
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{ /* ... */ }}
-```
-
-Mislukte aanroepen veroorzaken nooit een panic; ze retourneren de foutenvelop:
-
-```go
-map[string]any{
-	"result": "ERROR",
-	"error": map[string]any{
-		"Code":        "API_404", // API_<HTTP-status>, CURL_<n>, of een bibliotheekcode zoals RESPONSE
-		"Message":     "The domain name you requested could not be found. Please check and try again.",
-		"Details":     "The domain could not be found. Please check and try again.",
-		"GatewayCode": "Dna.DomainService:Domain:10007", // alleen bij API_<status>, wanneer de gateway een eigen code stuurde
-	},
-}
-```
-
-Drie methoden gebruiken een andere vorm, precies zoals in php-dna:
-
-| Methode | Succes | Fout |
-|---|---|---|
-| `CheckAvailability` | een kale `[]any`-lijst | de foutenvelop (`map[string]any`), dus het retourtype is `any` |
-| `GetCurrentBalance` | envelop met `OperationResult: "SUCCESS"` | dezelfde envelop met `OperationResult: "FAILED"` |
-| `GetResellerDetails` | platte map (`id`, `name`, `balance`, `balances`, ...) | de foutenvelop |
-
-### Optionele argumenten
-
-Go kent geen standaardargumenten. De methoden behouden de parametervolgorde van php-dna en nemen
-elk argument expliciet aan; de standaardwaarde van php-dna staat in elke sectie hieronder vermeld.
-Voor het gemak selecteren enkele nulwaarden de standaardwaarde: `GetCurrentBalance("")` betekent USD,
-`GetTldList(0)` betekent 20, `CheckAvailability(..., "")` betekent `create` en
-`SetForwarding(..., "")` betekent `Standard`.
-`RegisterWithContactInfo` neemt zijn vier optionele argumenten aan in een `*RegisterOptions`
-(nil = standaardwaarden). `AddResourceRecordValue` en `ReplaceResourceRecordValue` nemen `ttl *int`
-aan: `nil` behoudt de huidige TTL van de set.
-
-### Contacten
-
-Contacten zijn `map[string]any` met de sleutels van php-dna (`FirstName`, `LastName`, `Company`,
-`EMail`, `AddressLine1`, `AddressLine2`, `City`, `State`, `Country`, `ZipCode`, `Phone`,
-`PhoneCountryCode`, `Fax`, `FaxCountryCode`). De geneste vorm (`Address.Line1`,
-`Phone.Phone.Number`, ...) wordt ook geaccepteerd. Omdat Go-maps geen volgorde hebben, worden de
-vier rollen doorgegeven als een geordende `dna.Contacts`-lijst:
-
-```go
-contacts := dna.Contacts{
-	{Role: "Administrative", Contact: contact},
-	{Role: "Billing", Contact: contact},
-	{Role: "Technical", Contact: contact},
-	{Role: "Registrant", Contact: contact},
-}
-contacts = dna.AllRoles(contact)                 // hetzelfde contact voor alle vier rollen
-contacts = dna.ContactsFromMap(map[string]map[string]any{ /* rol => contact */ })
-```
-
-Half ingevulde contacten worden vóór verzending aangevuld volgens de regels van `ValidateContact`.
-Contacten worden gebruikt door `RegisterWithContactInfo` en `SaveContacts`; bij transfers worden nooit
-contacten verzonden.
-
-### Methodenamen
-
-Go-methodenamen volgen de Go-conventies; de php-dna-naam is dezelfde in lowerCamelCase.
-`getServiceUrl`/`setServiceUrl` heten `GetServiceURL`/`SetServiceURL` en `setSslVerification` heet
-`SetSSLVerification`.
+Methoden nemen de vereiste invoer als argumenten (`Info(ctx, "example.com")`) of, wanneer een operatie optionele
+invoer heeft, een request-struct (`Register(ctx, dna.DomainRegisterRequest{...})`). De volledige referentie met alle velden
+staat op [pkg.go.dev](https://pkg.go.dev/github.com/domainreseller/go-dna/v2).
 
 ## Gebruik
 
-### Domeinregistratie
+Alle snippets gaan uit van `ctx := context.Background()` en een `client`.
 
-Standaardwaarden van php-dna: standaard nameservers (`ns1.domainnameapi.com`,
-`ns2.domainnameapi.com`), EPP-vergrendeling aan, privacy uit, geen aanvullende attributen.
-Aanvullende attributen zijn alleen vereist voor domeinen zoals `.tr`.
+### Zoeken
 
 ```go
-contact := map[string]any{
-	"FirstName":        "John",
-	"LastName":         "Doe",
-	"Company":          "Example Corp",
-	"EMail":            "john.doe@example.com",
-	"AddressLine1":     "123 Lorem Street",
-	"AddressLine2":     "Suite 456",
-	"City":             "Springfield",
-	"Country":          "US",
-	"Fax":              "1234567890",
-	"FaxCountryCode":   "1",
-	"Phone":            "9876543210",
-	"PhoneCountryCode": 1,
-	"ZipCode":          "12345",
-	"State":            "IL",
-}
+a, err := client.Domains.Search(ctx, "example.com")
+// a.Available(), a.Price, a.Currency, a.IsPremium, a.IsDocumentRequired, a.Reason
 
-opts := dna.DefaultRegisterOptions()
-opts.NameServers = []string{"ns1.example.com", "ns2.example.com"}
-opts.EppLock = true
-opts.PrivacyLock = false
-// Alleen voor .tr-domeinen:
-opts.AdditionalAttributes = map[string]any{
-	"TRABISDOMAINCATEGORY": 1,             // 1 = particulier (Owner), 0 = bedrijf (Corporate)
-	"TRABISCITIZIENID":     "12345678901", // of TRABISTAXOFFICE + TRABISTAXNUMBER voor bedrijven
-}
-
-result := client.RegisterWithContactInfo("example.com", 1, dna.AllRoles(contact), opts)
-```
-
-Voor `.tr`-domeinen worden de verouderde TRABIS-namen genormaliseerd naar het gatewayschema: de
-categorie wordt `Owner`/`Corporate`, `TRABISCITIZIENID` wordt `TRABISCITIZENID`, en de velden voor
-land, stad, naam en organisatie vervallen (de gateway haalt ze uit het contact). Elke attribuutwaarde
-wordt als string verzonden.
-
-<details>
-<summary>Voorbeelduitvoer voor Domeinregistratie</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"ID":                      int64(0),
-		"Status":                  "Active",
-		"DomainName":              "",
-		"AuthCode":                "",
-		"LockStatus":              "false",
-		"PrivacyProtectionStatus": "false",
-		"IsChildNameServer":       "false",
-		"Contacts": map[string]any{
-			"Billing":        map[string]any{"ID": int64(0)},
-			"Technical":      map[string]any{"ID": int64(0)},
-			"Administrative": map[string]any{"ID": int64(0)},
-			"Registrant":     map[string]any{"ID": int64(0)},
-		},
-		"Dates": map[string]any{
-			"Start":         "",
-			"Expiration":    "2027-11-09T12:00:00",
-			"RemainingDays": int64(365),
-		},
-		"NameServers":      []any{},
-		"Additional":       []any{},
-		"ChildNameServers": []any{},
-	},
+results, err := client.Domains.BulkSearch(ctx, "example.com", "example.net", "example.org")
+for _, r := range results {
+	fmt.Println(r.DomainName, r.Status, r.Price)
 }
 ```
 
-Het registratie-endpoint antwoordt met een beknopt record, waardoor de meeste velden leeg zijn; roep
-daarna `GetDetails` aan voor het volledige domein. Wanneer de gateway de registratie weigert (HTTP 200
-met `"success": false`), is het resultaat een fout met code `REGISTER_DOMAIN` en de melding van de gateway.
+`BulkSearch` splitst lijsten met meer dan 30 domeinen op in meerdere requests. Prijzen gebruiken de valuta van het account of
+de valuta die is ingesteld met `dna.WithCurrency("TRY")`.
 
-</details>
+### Registreren
 
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domeinverlenging
+Met contact-handles (maak er een aan met `Contacts.Create`):
 
 ```go
-result := client.Renew("example.com", 1)
-```
+handle, err := client.Contacts.Create(ctx, dna.Contact{
+	FirstName: "Ada", LastName: "Lovelace", Email: "ada@example.com",
+	Address: "1 Example Street", City: "Istanbul", State: "Istanbul", PostalCode: "34000",
+	Country: "TR", PhoneCountryCode: "90", Phone: "5551234567",
+})
 
-<details>
-<summary>Voorbeelduitvoer voor Domeinverlenging</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"ExpirationDate": "2026-03-15T10:00:00"}}
-```
-
-Een weigering door de gateway (`"success": false`) retourneert code `RENEW_DOMAIN`; een succes zonder
-vervaldatum retourneert `DOMAIN_RENEW`.
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domeintransfer
-
-```go
-result := client.Transfer("example.com", "Xy9#mK2$", 1)
-```
-
-Bij transfers worden nooit contacten verzonden: de registrar neemt ze samen met het domein over,
-dus het verzoek bevat altijd een lege contactenlijst en de methode heeft geen contactenparameter. Het
-resultaat heeft dezelfde vorm als `GetDetails`; een weigering door de gateway (`"success": false`)
-retourneert code `TRANSFER_DOMAIN` met de melding van de gateway.
-
-<details>
-<summary>Voorbeelduitvoer voor Domeintransfer</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"ID": int64(0), "Status": "Active", "DomainName": "", "AuthCode": "",
-		"LockStatus": "false", "PrivacyProtectionStatus": "false", "IsChildNameServer": "false",
-		"Contacts": map[string]any{ /* Billing, Technical, Administrative, Registrant: {"ID": 0} */ },
-		"Dates": map[string]any{"Start": "", "Expiration": "2027-11-09T12:00:00", "RemainingDays": int64(365)},
-		"NameServers": []any{}, "Additional": []any{}, "ChildNameServers": []any{},
-	},
-}
-```
-
-</details>
-
-Gerelateerde transferaanroepen:
-
-```go
-client.CancelTransfer("example.com")  // {"result": "OK", "data": {"DomainName": "example.com", "Status": "Cancelled"}}
-client.ApproveTransfer("example.com") // {"result": "OK", "data": {"DomainName": "example.com", "Status": "Approved"}}
-client.RejectTransfer("example.com")  // {"result": "OK", "data": {"DomainName": "example.com", "Status": "Rejected"}}
-```
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Transfercontrole
-
-```go
-result := client.CheckTransfer("example.com", "Ab1!xyZ9")
-```
-
-`result` is alleen `OK` wanneer de registry meldt dat het domein overdraagbaar is; anders is het
-`ERROR` met code `TRANSFER_NOT_AVAILABLE` en dezelfde `data`.
-
-<details>
-<summary>Voorbeelduitvoer voor Transfercontrole</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"TransferAvailabilityStatus": true,
-		"AuthCodeIsRequired":         true,
-		"AuthCodeIsValid":            true,
-		"UserTransferRequired":       false,
-		"TransferLock":               false,
-		"Message":                    "Domain can be transferred",
-		"MessageKey":                 "TransferAvailable",
-		"Additional":                 []any{},
-	},
-}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domeinlijst
-
-```go
-result := client.GetList(map[string]any{
-	"OrderColumn":    "Id",
-	"OrderDirection": "ASC",
-	"PageNumber":     0,
-	"PageSize":       1000,
+res, err := client.Domains.Register(ctx, dna.DomainRegisterRequest{
+	DomainName:  "example.com",
+	Years:       1,
+	NameServers: []string{"ns1.example.net", "ns2.example.net"},
+	Handles:     dna.SameHandle(handle), // of dna.ContactHandles{Registrant: "DNA-1", Admin: "DNA-2", ...}
 })
 ```
 
-`PageNumber` (vanaf 0), `PageSize`, `OrderColumn` en `OrderDirection` worden vertaald naar
-`SkipCount`, `MaxResultCount` en `Sorting` van de gateway; andere sleutels (bijvoorbeeld
-`DomainName`) worden als filters doorgegeven. `nil` retourneert de eerste 200 domeinen.
-
-<details>
-<summary>Voorbeelduitvoer voor Domeinlijst</summary>
+Met inline contacten:
 
 ```go
-map[string]any{
-	"result":     "OK",
-	"TotalCount": int64(1),
-	"data": map[string]any{
-		"Domains": []any{
-			map[string]any{
-				"ID":                      int64(564346),
-				"Status":                  "Active",
-				"DomainName":              "example.com",
-				"AuthCode":                "",
-				"LockStatus":              "true",
-				"PrivacyProtectionStatus": "false",
-				"IsChildNameServer":       "false",
-				"Contacts": map[string]any{
-					"Billing":        map[string]any{"ID": ""},
-					"Technical":      map[string]any{"ID": ""},
-					"Administrative": map[string]any{"ID": ""},
-					"Registrant":     map[string]any{"ID": ""},
-				},
-				"Dates": map[string]any{
-					"Start":         "2024-03-15T10:20:30",
-					"Expiration":    "2027-03-15T10:20:30",
-					"RemainingDays": int64(126),
-				},
-				"NameServers":      []any{"ns1.example.com", "ns2.example.com"},
-				"Additional":       []any{},
-				"ChildNameServers": []any{},
-			},
-		},
-	},
+res, err := client.Domains.RegisterWithContacts(ctx, dna.DomainRegisterWithContactsRequest{
+	DomainName:  "example.com",
+	NameServers: []string{"ns1.example.net", "ns2.example.net"},
+	Contacts:    dna.SameContact(owner), // of dna.DomainContacts{Registrant: &owner, Admin: &admin, ...}
+})
+```
+
+Contacten worden vóór het versturen opgeschoond: velden worden getrimd, het land wordt omgezet naar hoofdletters en telefoonvelden behouden alleen
+hun cijfers (`"+90 (555) 123-45-67"` werkt). Sommige TLD's vereisen registry-attributen: je vindt ze met
+`client.Products.TLD(ctx, "com.tr")` en de `RequiredAttributes()` ervan, en geeft ze mee als `TLDAttributes`.
+
+Als de API antwoordt maar weigert (`"success": false`), is de fout een `*dna.OperationError` met de melding
+van de API.
+
+### Verlengen, verhuizen, herstellen
+
+```go
+check, err := client.Domains.RenewCheck(ctx, "example.com", 1) // check.Renewable, check.PremiumPrice
+res, err := client.Domains.Renew(ctx, "example.com", 1)
+
+tc, err := client.Domains.TransferCheck(ctx, "example.com", "auth-code") // tc.Transferable, tc.AuthCodeValid
+res, err := client.Domains.Transfer(ctx, dna.DomainTransferRequest{DomainName: "example.com", AuthCode: "auth-code"})
+st, err := client.Domains.TransferStatus(ctx, "example.com")
+
+err = client.Domains.Restore(ctx, "example.com") // tijdens de redemption-periode
+```
+
+### Domeindetails en de domeinlijst
+
+```go
+d, err := client.Domains.Info(ctx, "example.com")
+fmt.Println(d.Status, d.ExpirationDate, d.RemainingDays, d.Locked, d.NameServers, d.AuthCode)
+if owner, ok := d.Contact(dna.ContactTypeRegistrant); ok {
+	fmt.Println(owner.Email)
+}
+
+// Eén pagina
+page, err := client.Domains.List(ctx, dna.DomainListRequest{ListOptions: dna.ListOptions{Limit: 50}})
+
+// Elk domein; de pagina's worden voor je opgehaald
+for d, err := range client.Domains.All(ctx, dna.DomainListRequest{
+	Statuses: []dna.DomainStatus{dna.DomainStatusActive},
+}) {
+	if err != nil {
+		return err
+	}
+	fmt.Println(d.DomainName, d.ExpirationDate)
 }
 ```
 
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### TLD-lijst
+### Vergrendeling, privacy, nameservers, child-nameservers
 
 ```go
-result := client.GetTldList(100) // standaardwaarde php-dna: 20
+err = client.Domains.Lock(ctx, "example.com")
+err = client.Domains.Unlock(ctx, "example.com")
+err = client.Domains.SetPrivacy(ctx, "example.com", true)
+code, err := client.Domains.UpdateAuthCode(ctx, "example.com")
+
+err = client.Domains.SetNameServers(ctx, dna.DomainNameServersSetRequest{
+	DomainName:  "example.com",
+	NameServers: []string{"ns1.example.net", "ns2.example.net"},
+	// DNSSECMode: dna.DNSSECModeDisable, // alleen voor DNSSEC-getekende domeinen
+})
+
+err = client.Domains.AddHost(ctx, "example.com", "ns1.example.com", "192.0.2.10", "2001:db8::10") // IP-versie wordt herkend
+err = client.Domains.DeleteHost(ctx, "example.com", "ns1.example.com")
 ```
 
-<details>
-<summary>Voorbeelduitvoer voor TLD-lijst</summary>
+### Contacten van een domein
 
 ```go
-map[string]any{
-	"result": "OK",
-	"data": []any{
-		map[string]any{
-			"id": int64(1), "status": "Active", "tld": "com",
-			"maxchar": int64(63), "maxperiod": int64(10), "minchar": int64(1), "minperiod": int64(1),
-			"pricing": map[string]any{
-				"registration": map[string]any{"1": "10.8100", "2": "21.6200"},
-				"renew":        map[string]any{"1": "11.0100"},
-				"transfer":     map[string]any{"1": "10.6100"},
-				"restore":      map[string]any{"1": "99.9000"},
-			},
-			"currencies": map[string]any{
-				"registration": "USD", "renew": "USD", "transfer": "USD", "restore": "USD",
-			},
-		},
-	},
+err = client.Domains.SetContactHandles(ctx, "example.com", dna.ContactHandles{Admin: "DNA-2", Tech: "DNA-2"})
+err = client.Domains.UpdateContacts(ctx, "example.com", dna.DomainContacts{Billing: &billing})
+
+details, err := client.Contacts.Get(ctx, "DNA-1")           // het contact en de verificatiestatus ervan
+result, err := client.Contacts.Update(ctx, "DNA-1", contact) // werkt elk domein bij dat de handle gebruikt
+```
+
+### DNS-zone
+
+```go
+err = client.DNS.Add(ctx, dna.DNSAddRequest{
+	DomainName: "example.com", Name: "www", Type: dna.RecordTypeA, TTL: 600, Values: []string{"192.0.2.10"},
+})
+err = client.DNS.Update(ctx, dna.DNSUpdateRequest{ // vervangt alle waarden van de set
+	DomainName: "example.com", RecordName: "www", Type: dna.RecordTypeA, Values: []string{"192.0.2.20"},
+})
+err = client.DNS.Delete(ctx, dna.DNSDeleteRequest{
+	DomainName: "example.com", Name: "www", Type: dna.RecordTypeA, Value: "192.0.2.20",
+})
+
+sets, err := client.DNS.List(ctx, "example.com")
+for _, s := range sets {
+	fmt.Println(s.Name, s.Type, s.TTL, s.Values())
+}
+
+res, err := client.DNS.Apply(ctx, "example.com") // zet het domein om naar de nameservers van het platform
+```
+
+Namen kunnen relatief (`www`), de apex (`""` of `"@"`) of volledig gekwalificeerd zijn. Recordtypen zijn hier
+niet hoofdlettergevoelig (`"txt"` wordt verstuurd als `TXT`). De validatie vangt af wat de API zou weigeren: een CNAME op de apex, een CAA-waarde
+zonder drie delen, een MX-waarde zonder prioriteit. De testomgeving beantwoordt elke zone-aanroep met HTTP
+500, dus zonecode kan alleen in productie worden uitgeprobeerd.
+
+### DNSSEC
+
+```go
+ds, err := dna.ParseDS("2371 13 2 1F987CC6583E92DF0890718C42...") // zoals je DNS-provider het toont
+results, err := client.DNSSEC.Add(ctx, "example.com", ds)
+info, err := client.DNSSEC.Get(ctx, "example.com") // info.Status, info.DSRecords
+res, err := client.DNSSEC.Disable(ctx, "example.com")
+```
+
+### URL-doorstuurfunctie
+
+```go
+err = client.Domains.SetForwarding(ctx, "example.com", "https://www.example.org", dna.ForwardTypeStandard)
+f, err := client.Domains.Forwarding(ctx, "example.com") // nil als het domein er geen heeft
+err = client.Domains.DeleteForwarding(ctx, "example.com")
+```
+
+### Registrydocumenten (.tr)
+
+```go
+doc, err := dna.DocumentFromFile(dna.DocumentTypeIdentityCard, "id.pdf")
+res, err := client.Domains.UploadDocuments(ctx, "example.com.tr", doc)
+page, err := client.Domains.Documents(ctx, dna.DomainDocumentsListRequest{DomainName: "example.com.tr"})
+```
+
+Bestanden worden voor je base64-gecodeerd; formaat (PDF, JPG, PNG, DOC, DOCX, ODT) en grootte (10 MB per bestand, 50 MB per
+request) worden vóór het uploaden gecontroleerd.
+
+### SSL-certificaten
+
+```go
+csr, err := client.SSL.GenerateCSR(ctx, dna.SSLGenerateCSRRequest{
+	DomainName: "example.com", Country: "TR", State: "Istanbul", Locality: "Istanbul",
+	Organization: "Example Ltd", OrganizationUnit: "IT",
+})
+_, err = client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // schrijft af van het saldo
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
+	DomainName: "example.com", CSR: csr.CSR, ApproverMail: "admin@example.com",
+	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
+})
+st, err := client.SSL.Status(ctx, "example.com") // blijf pollen tot st.IsIssued
+cert, err := client.SSL.Content(ctx, "example.com")
+os.WriteFile("example.com.crt", []byte(cert.Chain()), 0o644)
+```
+
+### Hosting
+
+```go
+packages, err := client.Hosting.Packages(ctx)
+created, err := client.Hosting.Create(ctx, "example.com", "Linux-Starter") // schrijft af van het saldo
+
+ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+defer cancel()
+st, err := client.Hosting.Wait(ctx, created.ServiceID) // pollt tot de hosting actief is
+fmt.Println(st.PanelAddress, st.Username, st.Password)
+```
+
+Roep `Create` nooit opnieuw aan voor een hosting die nog wordt ingericht: dat schrijft twee keer af.
+
+### Saldo, prijzen en bestellingen
+
+```go
+account, err := client.Account.Get(ctx)
+usd, _ := account.Balance("USD")
+
+for tx, err := range client.Account.AllTransactions(ctx, dna.AccountTransactionsRequest{From: monthStart}) {
+	if err != nil {
+		return err
+	}
+	fmt.Println(tx.CreationTime, tx.Type, tx.Change())
+}
+
+if tld, err := client.Products.TLD(ctx, "com.tr"); err == nil && tld != nil {
+	price, _ := tld.RegisterPrice(1)
+	fmt.Println(tld.Name, price)
+}
+
+info, err := client.Products.Info(ctx, "com", dna.OrderRenew, 2) // prijs van een .com-verlenging van 2 jaar
+order, err := client.Orders.Get(ctx, "ORDER-CODE")
+```
+
+## Requests en BaseRequest
+
+Elke API-operatie is een request-type: `DomainInfoRequest`, `DNSAddRequest`, `SSLConfigureRequest`, ... Ze
+implementeren allemaal dezelfde interface:
+
+```go
+type Request interface {
+	Endpoint() Endpoint      // methode, pad en veiligheidsklasse
+	Query() url.Values       // query string, of nil
+	Body() any               // JSON-body, of nil
+	Validate() error         // gecontroleerd voordat er iets wordt verstuurd
 }
 ```
 
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domeinbeschikbaarheid Controleren
+Go kent geen overerving, dus de "basisklasse" is een struct die je embedt. `dna.BaseRequest` levert de standaardwaarden (geen
+query, geen body, niets te valideren); een request overschrijft een methode door die op zijn eigen type te definiëren. Alleen
+`Endpoint` heeft geen standaardwaarde. Een request uit dit pakket ziet er zo uit:
 
 ```go
-result := client.CheckAvailability([]string{"hello", "world123x0"}, []string{"com", "net"}, 1, "create")
-if list, ok := result.([]any); ok {
-	// geslaagd
-	_ = list
+type DomainRenewRequest struct {
+	BaseRequest
+	DomainName string
+	Years      int
+}
+
+func (DomainRenewRequest) Endpoint() Endpoint {
+	return Endpoint{Method: http.MethodPost, Path: "/api/v1/domains/renew", Safety: Billable}
+}
+
+func (r DomainRenewRequest) Body() any { return domainBody(r.DomainName).set("period", r.Years) }
+
+func (r DomainRenewRequest) Validate() error {
+	var v validator
+	v.required("domainName", r.DomainName)
+	v.check(r.Years >= 1 && r.Years <= 10, "years", "must be between 1 and 10")
+	return v.err()
 }
 ```
 
-<details>
-<summary>Voorbeelduitvoer voor Domeinbeschikbaarheid Controleren</summary>
+De servicemethoden bouwen deze requests voor je. `client.Do` verstuurt elke `Request`, ook eigen types, bijvoorbeeld
+om alleen de velden te lezen die je nodig hebt of om een endpoint aan te roepen dat dit pakket nog niet omvat:
 
 ```go
-[]any{
-	map[string]any{
-		"TLD": "com", "DomainName": "hello", "Status": "notavailable", "Command": "create",
-		"Period": int64(1), "IsFee": false, "Price": "10.8100", "Currency": "USD", "Reason": "Domain exists",
-	},
-	map[string]any{
-		"TLD": "com", "DomainName": "world123x0", "Status": "available", "Command": "create",
-		"Period": int64(1), "IsFee": false, "Price": "10.8100", "Currency": "USD", "Reason": nil,
-	},
+type ExpiryRequest struct {
+	dna.BaseRequest
+	DomainName string
+}
+
+func (ExpiryRequest) Endpoint() dna.Endpoint {
+	return dna.Endpoint{Method: http.MethodGet, Path: "/api/v1/domains/info", Safety: dna.Read}
+}
+
+func (r ExpiryRequest) Query() url.Values { return url.Values{"DomainName": {r.DomainName}} }
+
+var out struct {
+	ExpirationDate dna.Time `json:"expirationDate"`
+}
+resp, err := client.Do(ctx, ExpiryRequest{DomainName: "example.com"}, &out)
+```
+
+Je request krijgt alles wat de ingebouwde requests krijgen: inloggegevens, retries, pacing, foutnormalisatie,
+correlation-ID's, tracing en read-only-afdwinging. `client.NewHTTPRequest(ctx, req)` bouwt de exacte HTTP-request
+zonder die te versturen, om een kostenplichtige request te loggen of te controleren voordat hij de deur uit gaat.
+
+## Fouten
+
+| Fout                   | Wanneer                                                    | Nuttige velden                                                   |
+|------------------------|------------------------------------------------------------|------------------------------------------------------------------|
+| `*dna.InputError`      | `Validate` heeft de request afgewezen; **er is niets verstuurd** | `Request`, `Fields`                                        |
+| `*dna.APIError`        | de API antwoordde met een niet-2xx-status                  | `StatusCode`, `Code`, `Message`, `Details`, `Fields`, `Data`, `CorrelationID`, `Hint()` |
+| `*dna.OperationError`  | de API antwoordde 2xx met `"success": false`               | `Code`, `Message`, `CorrelationID`                               |
+| `*dna.NetworkError`    | de request is niet voltooid (DNS, TLS, timeout, reset)     | `Err`, `Timeout()`                                               |
+| `dna.ErrReadOnly`      | een read-only-client blokkeerde een wijziging; er is niets verstuurd | gebruik `errors.Is`                                    |
+
+`dna.KindOf(err)` classificeert elk daarvan: `KindAuth`, `KindNotFound`, `KindValidation`, `KindRejected`,
+`KindConflict`, `KindRateLimited`, `KindServer`, `KindNetwork`, `KindInvalidInput`, `KindReadOnly`. Hulpfuncties
+beantwoorden de gebruikelijke vragen:
+
+```go
+_, err := client.Domains.Renew(ctx, "example.com", 1)
+var apiErr *dna.APIError
+switch {
+case err == nil:
+case dna.OutcomeUnknown(err):
+	// De verlenging is mogelijk doorgegaan. Controleer het domein voordat je het opnieuw probeert.
+case dna.IsInsufficientBalance(err):
+case dna.IsNotFound(err):
+case dna.HasCode(err, dna.CodePrivacyNotSupported):
+case errors.As(err, &apiErr):
+	log.Println(apiErr.Code, apiErr.Message, apiErr.Hint(), apiErr.CorrelationID)
 }
 ```
 
-`IsFee` is `true` voor premium domeinen.
+Vertak op `Code`, niet op `Message`: meldingen zijn gelokaliseerd. API-codes zien eruit als
+`Dna.DomainService:Domain:10007`; zie de [foutenreferentie](https://www.domainnameapi.com/docs/reference/errors.md).
+Vermeld de `CorrelationID` wanneer je contact opneemt met de support.
 
-</details>
+## Veiligheid en betrouwbaarheid
 
-<hr style="border: 4px solid #000; border-style: dashed;">
+- **Veiligheidsklassen.** Elke request is `Read`, `Write`, `Destructive` of `Billable` (`req.Endpoint().Safety`).
+  Sommige POST- en PUT-requests zijn leesacties (`DomainSearchRequest`, `SSLStatusRequest`).
+- **Read-only-modus.** `dna.WithReadOnly()` blokkeert alles wat geen leesactie is, voor rapportagejobs en om
+  productie veilig te verkennen.
+- **Retries.** 429-responses worden altijd herhaald, met inachtneming van `Retry-After`: de API weigert ze voordat hij
+  iets doet. Netwerkfouten en 502/503/504 worden alleen herhaald voor leesacties en idempotente schrijfacties, zodat een registratie
+  of verlenging nooit twee keer wordt verstuurd. Controleer na een mislukte kostenplichtige request `dna.OutcomeUnknown(err)`.
+- **Pacing.** De client spreidt requests om onder de limieten per sleutel te blijven (5 requests/seconde, 2 zoekopdrachten/seconde,
+  één zone-aanroep per seconde). Zet het uit met `dna.WithPacing(false)` als je zelf afremt.
+- **Quota.** `Response.Quota` geeft de soft-quota-headers vrij. Boven de limiet vertraagt de API responses (tot
+  5 s) in plaats van ze te weigeren; de standaard-timeout van 60 s laat daar ruimte voor.
+- **Correlation-ID's.** Elke request draagt een `X-Correlation-ID`. Stel er zelf een in met
+  `dna.WithCorrelationID(ctx, id)` om API-aanroepen aan je logs te koppelen.
+- **Observability.** `dna.WithLogger(slog.Default())` logt elke uitwisseling; `dna.WithTrace(func(dna.TraceEvent))`
+  geeft je elke request, response en retry, voor metrics of foutrapportage. De API-sleutel zit er nooit in.
+- **Gelijktijdigheid.** Een `Client` is veilig voor gelijktijdig gebruik. Maak er één aan en deel hem.
+- **Tolerant decoderen.** Datums zonder tijdzone, `null`, `[]` in plaats van `{}`, numerieke of benoemde statussen en
+  rollen in elke schrijfwijze (`"registrant"`, `"ADMINISTRATIVE"`) worden allemaal gedecodeerd.
 
-### Domeininformatie
+## Client-opties
 
-```go
-result := client.GetDetails("example.com")
-result = client.SyncFromRegistry("example.com") // zelfde vorm
-```
+| Optie                           | Effect                                                                                   |
+|---------------------------------|------------------------------------------------------------------------------------------|
+| `WithEnvironment(dna.OTE)`      | gebruik de testomgeving (standaard `dna.Production`)                                     |
+| `WithBaseURL(url)`              | verstuur requests naar een proxy of een testserver                                       |
+| `WithHTTPClient(hc)`            | je eigen `*http.Client` (transport, proxy, TLS); redirects worden nooit gevolgd          |
+| `WithTimeout(d)`                | timeout per poging (standaard 60 s)                                                      |
+| `WithUserAgent("app/1.0")`      | zet je product vóór de User-Agent                                                        |
+| `WithCurrency("TRY")`           | valuta van zoek- en catalogusprijzen                                                     |
+| `WithRetries(n)`                | aantal retries (standaard 2)                                                             |
+| `WithPacing(false)`             | zet pacing aan de clientzijde uit                                                        |
+| `WithReadOnly()`                | blokkeer elke request die geen leesactie is                                              |
+| `WithLogger(l)`                 | log uitwisselingen naar een `*slog.Logger`                                               |
+| `WithTrace(fn)`                 | observeer elke request, response en retry                                                |
 
-<details>
-<summary>Voorbeelduitvoer voor Domeininformatie</summary>
+## Je code testen
 
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"ID":                      int64(564346),
-		"Status":                  "Active",
-		"DomainName":              "example.com",
-		"AuthCode":                "DHQ!K52",
-		"LockStatus":              "true",
-		"PrivacyProtectionStatus": "false",
-		"IsChildNameServer":       "true",
-		"Contacts": map[string]any{
-			"Billing":        map[string]any{"ID": "DNA-B-4"},
-			"Technical":      map[string]any{"ID": "DNA-T-3"},
-			"Administrative": map[string]any{"ID": "DNA-A-2"},
-			"Registrant":     map[string]any{"ID": "DNA-R-1"},
-		},
-		"Dates": map[string]any{
-			"Start":         "2024-03-15T10:20:30",
-			"Expiration":    "2027-03-15T10:20:30",
-			"RemainingDays": int64(126),
-		},
-		"NameServers":      []any{"ns1.example.com", "ns2.example.com"},
-		"Additional":       map[string]any{"TRABISDOMAINCATEGORY": "1"},
-		"ChildNameServers": []any{map[string]any{"ns": "ns1.example.com", "ip": "1.2.3.4"}},
-	},
-}
-```
-
-`Status` is het tekstuele label (`Active`, `TransferredOut`, `PendingDelete`, ...), ook wanneer de
-gateway de numerieke enum stuurt. Onleesbare datums worden `""`, nooit een onjuiste datum uit 1970.
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Nameserver Wijzigen
+Richt de client op een `httptest.Server`; verder hoeft er niets te worden gemockt:
 
 ```go
-result := client.ModifyNameServer("example.com", []string{"ns1.example.com", "ns2.example.com"})
+srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprint(w, `{"success":true,"info":{"domainName":"example.com","status":"AVAILABLE","price":11.99,"currency":"USD"}}`)
+}))
+defer srv.Close()
+
+client, _ := dna.NewClient("reseller-id", "api-key", dna.WithBaseURL(srv.URL), dna.WithPacing(false))
+a, err := client.Domains.Search(ctx, "example.com")
 ```
 
-Een map wordt ook geaccepteerd (de waarden worden in sleutelvolgorde gebruikt). Vóór verzending
-worden de items ontdaan van spaties, naar kleine letters omgezet, van een afsluitende punt ontdaan
-en ontdubbeld; het resultaat bevat die genormaliseerde lijst.
-
-<details>
-<summary>Voorbeelduitvoer voor Nameserver Wijzigen</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServers": []any{"ns1.example.com", "ns2.example.com"}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domeinvergrendeling Inschakelen
-
-```go
-result := client.EnableTheftProtectionLock("example.com")
-```
-
-<details>
-<summary>Voorbeelduitvoer voor Domeinvergrendeling Inschakelen</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"LockStatus": true}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domeinvergrendeling Uitschakelen
-
-```go
-result := client.DisableTheftProtectionLock("example.com")
-```
-
-<details>
-<summary>Voorbeelduitvoer voor Domeinvergrendeling Uitschakelen</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"LockStatus": false}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Child Nameserver Toevoegen
-
-```go
-result := client.AddChildNameServer("example.com", "ns1.example.com", "1.2.3.4")
-```
-
-<details>
-<summary>Voorbeelduitvoer voor Child Nameserver Toevoegen</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServer": "ns1.example.com", "IPAdresses": []any{"1.2.3.4"}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Child Nameserver Verwijderen
-
-```go
-result := client.DeleteChildNameServer("example.com", "ns1.example.com")
-```
-
-<details>
-<summary>Voorbeelduitvoer voor Child Nameserver Verwijderen</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServer": "ns1.example.com"}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Child Nameserver Bijwerken
-
-```go
-result := client.ModifyChildNameServer("example.com", "ns1.example.com", "1.2.3.5")
-```
-
-<details>
-<summary>Voorbeelduitvoer voor Child Nameserver Bijwerken</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServer": "ns1.example.com", "IPAdresses": []any{"1.2.3.5"}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domeinprivacy Wijzigen
-
-```go
-result := client.ModifyPrivacyProtectionStatus("example.com", true, "Owner request")
-```
-
-`status` is een bool of een waarde die panelen opslaan: `true`, `1`, `"1"`, `"true"`, `"on"` en
-`"yes"` schakelen privacy in, al het andere (`"off"`, `"0"`, `false`, ...) schakelt het uit. De reden
-wordt alleen behouden voor compatibiliteit met php-dna en wordt niet verzonden: de gateway kent zo'n
-veld niet.
-
-<details>
-<summary>Voorbeelduitvoer voor Domeinprivacy Wijzigen</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"PrivacyProtectionStatus": true}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domeincontacten Ophalen
-
-```go
-result := client.GetContacts("example.com")
-```
-
-Contacttypen van de gateway worden hoofdletterongevoelig herkend (`Admin`/`Administrative`,
-`Tech`/`Technical`, `Registrant`/`Owner`, `Billing`); elk ander type wordt bewaard onder zijn eigen
-naam met een hoofdletter.
-
-<details>
-<summary>Voorbeelduitvoer voor Domeincontacten Ophalen</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"contacts": map[string]any{
-			"Administrative": map[string]any{
-				"ID": "DNA-A-2", "Status": "Active", "AuthCode": "",
-				"FirstName": "Grace", "LastName": "Hopper", "Company": "", "EMail": "grace@example.com",
-				"Type": "Administrative",
-				"Address": map[string]any{
-					"Line1": "Example Street 2", "Line2": "", "Line3": "",
-					"State": "DC", "City": "Washington", "Country": "US", "ZipCode": "20001",
-				},
-				"Phone": map[string]any{
-					"Phone": map[string]any{"Number": "2025550100", "CountryCode": "1"},
-					"Fax":   map[string]any{"Number": "2025550101", "CountryCode": "1"},
-				},
-				"Additional": []any{},
-			},
-			// "Billing", "Registrant", "Technical": zelfde vorm
-		},
-	},
-}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domeincontacten Opslaan
-
-```go
-result := client.SaveContacts("example.com", dna.AllRoles(contact))
-```
-
-<details>
-<summary>Voorbeelduitvoer voor Domeincontacten Opslaan</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"contacts": map[string]any{}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Resellergegevens Ophalen
-
-```go
-result := client.GetResellerDetails()
-```
-
-<details>
-<summary>Voorbeelduitvoer voor Resellergegevens Ophalen</summary>
-
-```go
-map[string]any{
-	"result":   "OK",
-	"id":       "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-	"active":   true,
-	"name":     "Example Reseller",
-	"balance":  "601.64",
-	"currency": "USD",
-	"symbol":   "$",
-	"balances": []any{
-		map[string]any{"balance": "601.64", "currency": "USD", "symbol": "$"},
-		map[string]any{"balance": "1250.50", "currency": "TL", "symbol": "TL"},
-	},
-}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Huidig Saldo Ophalen
-
-```go
-result := client.GetCurrentBalance("USD") // USD (standaard), TRY, EUR of GBP
-```
-
-<details>
-<summary>Voorbeelduitvoer voor Huidig Saldo Ophalen</summary>
-
-```go
-map[string]any{
-	"ErrorCode":        int64(0),
-	"OperationMessage": "Command completed succesfully.",
-	"OperationResult":  "SUCCESS",
-	"Balance":          "601.64",
-	"CurrencyId":       int64(2),
-	"CurrencyInfo":     nil,
-	"CurrencyName":     "USD",
-	"CurrencySymbol":   "$",
-}
-```
-
-Bij een fout: `ErrorCode` is `API_<status>` (of `CURL_<n>`), `OperationMessage` de foutmelding,
-`OperationResult` `"FAILED"` en `Balance` `"0.00"`. Het account rapporteert alleen saldi in USD en TRY:
-voor elke andere valuta is het resultaat `FAILED` met `ErrorCode: "BALANCE"` en
-`No EUR balance is reported for this account. Available: USD, TRY.`
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### DNS-zonebeheer
-
-De gateway slaat records op als **sets** (één naam + type met al zijn waarden) en elke schrijfactie
-vervangt de hele set. Recordnamen kunnen worden opgegeven als `@`, `""`, de zone-apex, een relatief
-label (`www`) of een volledige naam (`www.example.com`); ze worden teruggebracht tot het relatieve
-label dat de gateway verwacht. Ondersteunde typen: `A`, `AAAA`, `ALIAS`, `CAA`, `CNAME`, `DS`, `MX`,
-`NAPTR`, `PTR`, `SRV`, `TLSA`, `TXT` (andere worden geweigerd vóórdat er een aanroep plaatsvindt).
-De TTL wordt begrensd tot 1..86400 en het resultaat vermeldt het type in hoofdletters en de TTL die
-daadwerkelijk zijn verzonden. Met `apply = true` (de standaardwaarde van php-dna) worden wijzigingen
-direct doorgevoerd; als die apply mislukt, wordt de foutenvelop daarvan geretourneerd (de wijziging
-blijft klaargezet). Opeenvolgende zone-aanroepen liggen minstens één seconde uit elkaar, omdat de
-gateway snelle reeksen verzoeken aan een rate limit onderwerpt.
-
-```go
-// Lijst: één rij per waarde, namen volledig gekwalificeerd
-client.GetResourceRecords("example.com")
-
-// Stel een naam+type in op precies deze waarden (lege lijst verwijdert de set). Standaard: ttl 3600, apply true
-client.SetResourceRecordSet("example.com", "@", "MX", []string{"10 mx1.example.com", "20 mx2.example.com"}, 3600, true)
-
-// Voeg ÉÉN waarde toe / vervang of verwijder deze en behoud de andere (ttl nil = TTL van de set behouden)
-client.AddResourceRecordValue("example.com", "www", "A", "192.0.2.10", nil, true)
-client.ReplaceResourceRecordValue("example.com", "www", "A", "192.0.2.10", "192.0.2.11", nil, true)
-client.RemoveResourceRecordValue("example.com", "www", "A", "192.0.2.11", true)
-
-// Verwijder een volledige naam+type (knownValue "" = eerst een huidige waarde opzoeken)
-client.DeleteResourceRecordSet("example.com", "www", "A", true, "")
-
-// Low-level aanroepen (content is een string of []string)
-client.AddResourceRecord("example.com", "api", "CNAME", "example.com.", 300, false)
-client.EditResourceRecord("example.com", "api", "api", "CNAME", "www.example.com.", 300, false)
-client.DeleteResourceRecord("example.com", "old.example.com.", "192.0.2.99", "A", false)
-client.ApplyResourceRecords("example.com")
-```
-
-<details>
-<summary>Voorbeelduitvoer voor DNS-zonebeheer</summary>
-
-```go
-// GetResourceRecords
-map[string]any{"result": "OK", "data": map[string]any{"records": []any{
-	map[string]any{"Name": "example.com.", "Type": "A", "TTL": int64(3600), "Content": "192.0.2.1", "Disabled": false},
-	map[string]any{"Name": "www.example.com.", "Type": "CNAME", "TTL": int64(300), "Content": "example.com.", "Disabled": false},
-}}}
-
-// SetResourceRecordSet, AddResourceRecordValue, ReplaceResourceRecordValue, RemoveResourceRecordValue
-map[string]any{"result": "OK", "data": map[string]any{
-	"Name": "", "Type": "MX", "TTL": int64(3600), "Contents": []any{"10 mx1.example.com", "20 mx2.example.com"},
-}}
-
-// Waarde al aanwezig / niet aanwezig: er wordt niets geschreven
-map[string]any{"result": "OK", "data": map[string]any{"Name": "", "Type": "MX", "Contents": []any{"..."}, "Changed": false}}
-
-// DeleteResourceRecordSet van een set die niet bestaat
-map[string]any{"result": "OK", "data": map[string]any{"Name": "nothing", "Type": "A", "Removed": false}}
-
-// AddResourceRecord / EditResourceRecord
-map[string]any{"result": "OK", "data": map[string]any{"Name": "api", "Type": "CNAME", "TTL": int64(300), "Content": "example.com."}}
-
-// DeleteResourceRecord
-map[string]any{"result": "OK", "data": map[string]any{"Name": "old.example.com.", "Type": "A", "Content": "192.0.2.99"}}
-
-// ApplyResourceRecords
-map[string]any{"result": "OK", "data": map[string]any{"DomainName": "example.com"}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### URL-doorsturing
-
-```go
-client.SetForwarding("example.com", "https://www.example.org", "Standard") // of "Frame" (gemaskeerd)
-client.GetForwarding("example.com")
-client.DeleteForwarding("example.com")
-```
-
-<details>
-<summary>Voorbeelduitvoer voor URL-doorsturing</summary>
-
-```go
-// SetForwarding
-map[string]any{"result": "OK", "data": map[string]any{"RedirectAddress": "https://www.example.org", "ForwardType": "Standard"}}
-
-// GetForwarding
-map[string]any{"result": "OK", "data": map[string]any{"Enabled": true, "RedirectAddress": "https://www.example.org", "ForwardType": "Standard"}}
-
-// GetForwarding wanneer er geen doorsturing is ingesteld
-map[string]any{"result": "OK", "data": map[string]any{"Enabled": false, "RedirectAddress": "", "ForwardType": ""}}
-
-// DeleteForwarding (Removed is false wanneer er niets was ingesteld)
-map[string]any{"result": "OK", "data": map[string]any{"DomainName": "example.com", "Removed": true}}
-```
-
-</details>
-
-Alleen het antwoord "Redirect information not found" van de gateway betekent "niet ingesteld"; elke
-andere fout, bijvoorbeeld een onbekend domein, wordt als fout geretourneerd.
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Hulpfuncties (zonder netwerk)
-
-```go
-client.IsTrTLD("example.com.tr") // true
-
-client.ValidateContact(map[string]any{"FirstName": " Jo ", "Phone": "+90 (532) 374 33 88", "Country": "Turkey"})
-// map[string]any{"FirstName": "Jo", "LastName": "Jo", "AddressLine1": "Addres yok", "City": "ISTANBUL",
-//   "State": "ISTANBUL", "Country": "TR", "ZipCode": "34000", "Phone": "5323743388",
-//   "PhoneCountryCode": "90", "Fax": "", "FaxCountryCode": ""}
-```
-
-`ValidateContact` vult ontbrekende velden aan met plaatsaanduidingen, verwijdert cijfers en
-leestekens uit namen, valt terug van State op City, zet gangbare landnamen om naar ISO-codes en
-splitst telefoon- en faxnummers op in nummer en landcode. Een nummer dat met een eigen
-internationaal voorvoegsel is geschreven (`+44 20 ...`, `0044 20 ...`) behoudt zijn eigen landcode,
-ook wanneer er een andere is opgegeven.
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Diagnostiek
-
-```go
-client.GetRequestData()        // {"url": ..., "method": ..., "payload": ...} van de laatste aanroep
-client.GetResponseData()       // laatste gedecodeerde respons, of {"raw_response": body}
-client.GetResponseHeaders()    // {"url", "http_code", "content_type", "total_time", "headers"}
-client.GetParsedResponseData() // laatste geparste respons, of de fout {Code, Message, Details}
-client.GetLastFunction()       // bijv. "request:GET domains/info"
-client.GetServiceURL()         // basis-URL van de gateway
-client.SetServiceURL("https://ote.domainresellerapi.com/api/v1")
-```
-
-Een `Client` houdt deze status per aanroep bij, dus deel één `Client` niet tussen goroutines; maak er
-één per goroutine aan.
-
-## Foutafhandeling
-
-- Gatewayfouten retourneren `Code: "API_<HTTP status>"`. Wanneer de gateway een eigen foutcode stuurde
-  (bijvoorbeeld `Dna.DomainService:Domain:10007`), wordt die toegevoegd als `GatewayCode`, zodat
-  aanroepers "domein niet gevonden" kunnen onderscheiden van "TLD niet ondersteund". De melding komt
-  van de gateway; een lege foutbody wordt `HTTP 429 - Too Many Requests` (enzovoort),
-  validatiefouten worden per veld vermeld in `Details` (`Admin PostalCode - 'PostalCode' is required`),
-  en standaardteksten van de backend zoals `Exception of type '...' was thrown` worden vervangen door
-  de details van de gateway, of door een vaste melding met de foutcode — nooit door de ruwe responsbody.
-- Een 301/302-antwoord betekent dat de inloggegevens zijn geweigerd: `Message: "Invalid API credentials"`.
-- Transportfouten (time-out, DNS, TLS, verbinding verbroken) zijn fouten, nooit een leeg succes. Een
-  time-out retourneert `Code: "CURL_28"` en `Could not reach the DomainNameAPI service: the connection
-  timed out. (...)`; andere fouten gebruiken nummers in curl-stijl (`CURL_6` DNS, `CURL_7` verbinden,
-  `CURL_35` TLS, `CURL_56` verbinding verbroken, `CURL_60` certificaat) en `Curl error during request: ...`.
-  `API_<n>` is gereserveerd voor HTTP-statussen.
-- Antwoorden op registratie, transfer en verlenging met HTTP 200 en `"success": false` zijn
-  weigeringen: `REGISTER_DOMAIN`, `TRANSFER_DOMAIN` of `RENEW_DOMAIN` met de melding van de gateway.
-- Een lege of `null` succesbody retourneert `Code: "RESPONSE"`.
-- Time-outs: 30 seconden per aanroep, 10 seconden voor het opzetten van de verbinding.
-
-## Testmodus
-
-Geef `true` (of `"true"`, `"1"`, `"on"`, `"yes"`) mee als derde constructorargument om de
-OTE-testgateway `https://ote.domainresellerapi.com/api/v1` te gebruiken. Telemetrie in testmodus wordt
-gelabeld met `environment: ote`.
-
-## Telemetrie (foutrapportage)
-
-Wanneer een API-aanroep mislukt, kan de bibliotheek een foutrapport sturen naar de eigen
-fouttracker van DomainNameAPI (Sentry). Een klein willekeurig deel van de geslaagde aanroepen (4%,
-plus elke aanroep die langer duurt dan 1 seconde) wordt als prestatierecord verzonden. Rapportage
-staat **standaard aan**.
-
-**Wat wordt verzonden:** foutcode en -melding; endpointpad en HTTP-methode; duur van de aanroep;
-bibliotheeknaam (`DomainNameAPI-Go`), bibliotheekversie en Go-versie; reseller ID en domeinnaam; het
-publieke IP-adres van de server (opgevraagd via `api.ipify.org`); de gebruikersnaam van het
-besturingssysteem; het API-verzoek en de API-respons, inclusief contactgegevens. Alleen
-inloggegevens worden gemaskeerd: EPP-/autorisatiecodes, API-sleutels, wachtwoorden en tokens worden `***`.
-
-**Wat wordt nooit verzonden:** EPP-/autorisatiecodes, API-sleutels, wachtwoorden of tokens in
-leesbare vorm; argumenten van functieaanroepen in stacktraces.
-
-**Waarom en hoe lang:** de gegevens worden uitsluitend gebruikt voor gebruiksmeting en vroege
-diagnose van problemen en worden 30 dagen bewaard op de eigen Sentry-server van DomainNameAPI.
-
-**Uitschakelen, of alleen het minimum verzenden:**
-
-```go
-client := dna.New(resellerID, apiKey, false)
-client.SetErrorReportingEnabled(false) // er wordt niets verzonden
-
-client.SetTelemetryMinimal(true) // alleen foutcode/-melding, endpoint, timing, versies en reseller ID
-```
-
-Telemetrie draait op de achtergrond, blokkeert de aanroep nooit lang en veroorzaakt nooit een panic
-in uw code.
-
-> 🔒 **Beveiliging:** verificatie van TLS-certificaten staat aan. Op een host met een verouderde
-> CA-bundel kan deze worden uitgeschakeld met `client.SetSSLVerification(false)` — niet aanbevolen;
-> de CA-bundel bijwerken is de betere oplossing.
-
-## Geavanceerde opties
-
-```go
-client := dna.New(resellerID, apiKey, false,
-	dna.WithHTTPClient(myHTTPClient),      // elke Do(*http.Request) (*http.Response, error)
-	dna.WithSentryDSN("https://key@host/1"),
-	dna.WithTelemetryClient(myHTTPClient),
-)
-```
-
-Configureer bij een eigen HTTP-client de time-outs, proxy's en TLS op die client; deze mag geen
-redirects volgen (retourneer `http.ErrUseLastResponse` vanuit `CheckRedirect`).
-
-## Testen
-
-Go hoeft niet op de host geïnstalleerd te zijn; Docker is voldoende:
+## Migreren van v1
+
+v2 is een nieuw ontwerp: getypeerde resultaten in plaats van `map[string]any`, fouten in plaats van
+`{"result": "ERROR"}`-enveloppen en de volledige API in plaats van de methodenset van php-dna. Het modulepad is gewijzigd in
+`github.com/domainreseller/go-dna/v2`, dus v1 blijft werken tot je overstapt.
+
+| v1                                                  | v2                                                                     |
+|-----------------------------------------------------|------------------------------------------------------------------------|
+| `dna.New(id, key, true)`                            | `dna.NewClient(id, key, dna.WithEnvironment(dna.OTE))`                 |
+| `res["result"] == "OK"`                             | `err == nil`                                                           |
+| `GetResellerDetails`, `GetCurrentBalance`           | `Account.Get` (+ `Account.Balance("USD")`)                             |
+| `CheckAvailability`                                 | `Domains.Search`, `Domains.BulkSearch`                                 |
+| `GetList`                                           | `Domains.List`, `Domains.All`                                          |
+| `GetTldList`                                        | `Products.TLDs`, `Products.AllTLDs`, `Products.TLD`                    |
+| `GetDetails`, `GetContacts`, `SyncFromRegistry`     | `Domains.Info`                                                         |
+| `RegisterWithContactInfo`                           | `Domains.RegisterWithContacts` (of `Contacts.Create` + `Domains.Register`) |
+| `Renew`, `Transfer`, `CheckTransfer`                | `Domains.Renew`, `Domains.Transfer`, `Domains.TransferCheck`           |
+| `ModifyNameServer`                                  | `Domains.SetNameServers`                                               |
+| `EnableTheftProtectionLock` / `Disable...`          | `Domains.Lock` / `Domains.Unlock`                                      |
+| `ModifyPrivacyProtectionStatus`                     | `Domains.SetPrivacy`                                                   |
+| `SaveContacts`                                      | `Domains.UpdateContacts`, `Domains.SetContactHandles`                  |
+| `AddChildNameServer`, `ModifyChildNameServer`, `DeleteChildNameServer` | `Domains.AddHost`, `Domains.UpdateHost`, `Domains.DeleteHost` |
+| `GetResourceRecords`                                | `DNS.List`                                                             |
+| `AddResourceRecord`, `AddResourceRecordValue`       | `DNS.Add`                                                              |
+| `EditResourceRecord`, `SetResourceRecordSet`, `ReplaceResourceRecordValue` | `DNS.Update`                                    |
+| `DeleteResourceRecord`, `RemoveResourceRecordValue`, `DeleteResourceRecordSet` | `DNS.Delete` (eenmaal per waarde)           |
+| `ApplyResourceRecords`                              | `DNS.Apply`                                                            |
+| `GetForwarding`, `SetForwarding`, `DeleteForwarding`| `Domains.Forwarding`, `Domains.SetForwarding`, `Domains.DeleteForwarding` |
+| `CancelTransfer`, `ApproveTransfer`, `RejectTransfer` | niet in de gepubliceerde API; verstuur een [eigen request](#requests-en-baserequest) als je account ze heeft |
+| `IsTrTLD`, `ValidateContact`                        | `strings.HasSuffix(name, ".tr")`; validatie draait bij elke request    |
+| `GetRequestData`, `GetResponseData`, ...            | `WithTrace`, `WithLogger`, `Response` van `client.Do`                  |
+| telemetry (`SetErrorReportingEnabled`, Sentry)      | verwijderd: niets verlaat je proces; stuur `WithTrace`-events door naar je eigen rapportage |
+| `SetSSLVerification(false)`                         | `WithHTTPClient` met je eigen TLS-instellingen                         |
+
+## Ontwikkeling
 
 ```bash
-docker run --rm -v "$PWD":/src -w /src golang:1.23 go test ./...
-docker run --rm -v "$PWD":/src -w /src golang:1.23 go vet ./...
+go test ./...          # unittests; geen enkele raakt het netwerk
+go vet ./...
+gofmt -l .
 ```
 
-De testsuite bevat unittests voor de HTTP-laag, foutmapping, telemetrie en hulpfuncties, en een
-conformiteitstest die alle 134 php-dna-fixtures uit `testdata/conformance` opnieuw afspeelt
-(verzoeken over de lijn en retourwaarden moeten exact overeenkomen met php-dna). Geen enkele test
-maakt gebruik van het netwerk.
+`testdata/openapi.json` is het OpenAPI-document van de API. De tests controleren elk request-type ertegen (methode,
+pad, querynamen, body-velden, verplichte velden), de JSON-namen van elk response-type tegen de response-
+schema's en elke enum-waarde, en falen als de API een operatie krijgt zonder request-type. Zo werk je het bij:
 
-## Return- en Foutcodes met Beschrijvingen
+```bash
+curl -fsSL -A "go-dna-spec-update" -o testdata/openapi.json https://api.domainresellerapi.com/swagger/v1/swagger.json
+go test ./...
+```
 
-| Code | Beschrijving                                   | Detail                                                                                                                                                         |
-|------|------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 1000 | Commando succesvol voltooid                    | Operatie succesvol.                                                                                                                                            |
-| 1001 | Commando succesvol voltooid; actie in behandeling | Operatie succesvol. De operatie staat momenteel echter in de wachtrij voor voltooiing.                                                                      |
-| 2003 | Vereiste parameter ontbreekt                   | Fout door ontbrekende parameter. Bijvoorbeeld: geen telefoonnummer in de contactgegevens.                                                                      |
-| 2105 | Object komt niet in aanmerking voor verlenging | Domeinstatus is niet geschikt voor verlenging, vergrendeld voor updatebewerkingen. Status mag niet "clientupdateprohibited" zijn. Kan ook door andere statusvoorwaarden komen. |
-| 2200 | Authenticatiefout                              | Autorisatiefout, beveiligingscode is onjuist of het domein is geregistreerd bij een andere registrar.                                                          |
-| 2302 | Object bestaat al                              | Domeinnaam of nameservergegevens bestaan al in de database. Kan niet worden geregistreerd.                                                                     |
-| 2303 | Object bestaat niet                            | Domeinnaam of nameservergegevens bestaan niet in de database. Nieuwe registratie vereist.                                                                      |
-| 2304 | Objectstatus verbiedt bewerking                | Domeinstatus is niet geschikt voor updates, vergrendeld voor updatebewerkingen. Status mag niet "clientupdateprohibited" zijn. Kan ook door andere statusvoorwaarden komen. |
+Zie [AGENTS.md](AGENTS.md) voor de conventies van deze repository.
 
-Bibliotheekcodes: `RESPONSE` (lege respons), `CREDENTIALS` (ongeldig responsformaat van het
-account-endpoint), `AVAILABILITY` (geen domeinnamen opgegeven), `BALANCE` (valuta niet door het
-account gerapporteerd), `TRANSFER_NOT_AVAILABLE`, `REGISTER_DOMAIN` / `TRANSFER_DOMAIN` /
-`RENEW_DOMAIN` (de gateway heeft de bewerking geweigerd), `DOMAIN_RENEW` (verlenging zonder
-vervaldatum), `ADD_ZONE`, `EDIT_ZONE`, `SET_ZONE`, `DELETE_ZONE` (niet-ondersteund recordtype of
-waarde niet gevonden), `SET_FORWARD` (niet-ondersteund doorstuurtype of leeg adres), `CURL_<n>`
-(transportfout), `API_<status>` (HTTP-fout, met `GatewayCode` wanneer de gateway een eigen code stuurde).
+## Support
+
+- API-documentatie: <https://www.domainnameapi.com/docs/>
+- CLI en MCP-server: <https://github.com/domainreseller/cli>
+- Website: <https://www.domainnameapi.com>
 
 ## Licentie
 
-Apache License 2.0 — zie [LICENSE](LICENSE).
+Apache License 2.0. Zie [LICENSE](LICENSE).
