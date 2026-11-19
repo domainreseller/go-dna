@@ -1,7 +1,7 @@
 <div align="center">
-  <a href="README-TR.md"   >   TR <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/TR.png" alt="TR" height="20" /></a>
+  <a href="README-TR.md">TR <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/TR.png" alt="TR" height="20" /></a>
   <a href="README.md"> | EN <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/US.png" alt="EN" height="20" /></a>
-   <a href="README-DE.md"> | DE <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/DE.png" alt="DE" height="20" /></a>
+  <a href="README-DE.md"> | DE <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/DE.png" alt="DE" height="20" /></a>
   <a href="README-SA.md"> | SA <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/SA.png" alt="AR" height="20" /></a>
   <a href="README-NL.md"> | NL <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/NL.png" alt="NL" height="20" /></a>
   <a href="README-AZ.md"> | AZ <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/AZ.png" alt="AZ" height="20" /></a>
@@ -10,998 +10,559 @@
   <a href="README-IT.md"> | IT <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/IT.png" alt="IT" height="20" /></a>
 </div>
 
-# go-dna — Go üçün DomainNameAPI klienti
+# go-dna: Domain Name API üçün Go SDK-sı
 
-DomainNameAPI domen qeydiyyatçısının REST API-si üçün Go klienti. Bu,
-[php-dna](https://github.com/domainreseller/php-dna) kitabxanasının dəqiq portudur: eyni metodlar,
-şəbəkə üzərindən eyni sorğular və eyni qaytarılan dəyərlər. Yeganə asılılıq standart kitabxanadır.
+[![Go Reference](https://pkg.go.dev/badge/github.com/domainreseller/go-dna/v2.svg)](https://pkg.go.dev/github.com/domainreseller/go-dna/v2)
+[![CI](https://github.com/domainreseller/go-dna/actions/workflows/ci.yml/badge.svg)](https://github.com/domainreseller/go-dna/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-## 📦 Yükləmə — həmişə Releases istifadə edin!
+[Domain Name API](https://www.domainnameapi.com) reseller REST API-si üçün tipli Go klienti: domen axtarışı,
+qeydiyyat, yenilənmə və transfer, DNS, DNSSEC, kontaktlar, SSL sertifikatları, hosting, sifarişlər, məhsul
+kataloqu və balansınız.
 
-⬇️ **Ən son test edilmiş versiyanı buradan əldə edin: https://github.com/domainreseller/go-dna/releases/latest**
+- **API-nin bütün 64 əməliyyatı**, [`dna` CLI](https://github.com/domainreseller/cli) ilə eyni şəkildə qruplaşdırılıb:
+  `dna domain info` əmri `client.Domains.Info`, `dna dns add` əmri `client.DNS.Add` qarşılığıdır.
+- **Tipli nəticələr və enum-lar**: `d.Status == dna.DomainStatusPendingDelete`, `d.ExpirationDate.Before(...)`,
+  `map[string]any` yoxdur.
+- **Hər əməliyyat bir sorğu tipidir**; `dna.BaseRequest`-i embed edir və hər hansı bir şey göndərilməzdən əvvəl
+  özünü yoxlayır. Öz sorğularınızı da eyni qaydada yaza bilərsiniz.
+- **Susmaya görə təhlükəsiz**: ödənişli sorğular kor-koranə təkrarlanmır, `WithReadOnly` dəyişiklikləri
+  bloklayır, klient özünü sürət limitlərinin altında saxlayır və eyni vaxtda istifadə üçün təhlükəsizdir.
+- **Yalnız standart kitabxana.** Go 1.23 və ya daha yeni.
 
-> ⚠️ Yaşıl **Code → Download ZIP** düyməsindən istifadə **etməyin** — o, xam inkişaf budağını yükləyir. Buraxılış paketləri versiyalanmış, test edilmiş və istehsala hazırdır.
+```go
+client, _ := dna.NewClient(resellerID, apiKey, dna.WithEnvironment(dna.OTE))
 
-## Tələblər
+a, err := client.Domains.Search(ctx, "example.com")
+if err == nil && a.Available() {
+	fmt.Printf("%s is available for %.2f %s\n", a.DomainName, a.Price, a.Currency)
+}
+```
 
-- Go 1.21 və ya daha yüksək
-- Üçüncü tərəf paketləri yoxdur (yalnız standart kitabxanadan `net/http` və `encoding/json`)
+## Mündəricat
+
+- [Quraşdırma](#quraşdırma)
+- [Giriş məlumatları və mühitlər](#giriş-məlumatları-və-mühitlər)
+- [Servislər](#servislər)
+- [Nümunələr](#nümunələr)
+- [Sorğular və BaseRequest](#sorğular-və-baserequest)
+- [Xətalar](#xətalar)
+- [Təhlükəsizlik və etibarlılıq](#təhlükəsizlik-və-etibarlılıq)
+- [Client seçimləri](#client-seçimləri)
+- [Kodunuzun test edilməsi](#kodunuzun-test-edilməsi)
+- [v1-dən keçid](#v1-dən-keçid)
+- [Layihənin hazırlanması](#layihənin-hazırlanması)
 
 ## Quraşdırma
 
-Go modules ilə buraxılmış bir versiyanı sabitləyin:
+```bash
+go get github.com/domainreseller/go-dna/v2
+```
+
+```go
+import dna "github.com/domainreseller/go-dna/v2"
+```
+
+İşlək proqramlar [examples](examples) qovluğundadır: `quickstart`, `register`, `expiring`, `dns`, `ssl` və
+`custom-request`.
 
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.1
+go run ./examples/quickstart example.com
 ```
+
+## Giriş məlumatları və mühitlər
+
+Reseller panelindən (**API settings**) iki API giriş məlumatı götürməlisiniz. Panelə giriş məlumatları işləmir.
+
+| Giriş məlumatı | Necə görünür                           |
+|----------------|----------------------------------------|
+| Reseller ID    | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
+| API key        | uzun gizli sətir                       |
+
+İki mühit var. **Test mühiti olan OTE ilə başlayın**: onun öz məlumatları və öz API açarı var; orada
+etdiyiniz heç bir şey pul tutmur və canlı domenlərə toxunmur.
 
 ```go
-import dna "github.com/domainreseller/go-dna"
+// Test mühiti (OTE)
+client, err := dna.NewClient(resellerID, oteAPIKey, dna.WithEnvironment(dna.OTE))
+
+// Production (susmaya görə): real qeydiyyatlar, real ödənişlər
+client, err := dna.NewClient(resellerID, apiKey)
 ```
 
-Paketin adı `dna`-dır. Hər metod üçün işlədilə bilən nümunələr [examples](examples) qovluğundadır:
+`NewClientFromEnv`, `dna` CLI ilə eyni dəyişənləri oxuyur:
 
-```bash
-go run ./examples/GetDetails
-```
-
-## 🔑 API Məlumatları — Reseller ID və API Key
-
-Kitabxanaya konstruktora ötürülən dəqiq iki giriş məlumatı lazımdır:
-
-| Parametr | Dəyər |
-|---|---|
-| Birinci | Reseller ID — `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` kimi UUID |
-| İkinci | API Key |
-
-> 💡 **Reseller ID** və **API Key** məlumatlarınızı DomainNameAPI panelinizdə **API Parametrləri** bölməsində tapa bilərsiniz.
-> ⚠️ Bunlar **API giriş məlumatlarıdır** — panelə giriş məlumatlarınız burada **işləməyəcək**.
+| Dəyişən           | Mənası                                                        |
+|-------------------|---------------------------------------------------------------|
+| `DNA_RESELLER_ID` | reseller ID                                                   |
+| `DNA_API_KEY`     | seçilmiş mühitin API açarı                                    |
+| `DNA_ENV`         | `production` (susmaya görə) və ya `ote`                       |
+| `DNA_TEST_MODE`   | `true` OTE-ni seçir (digər DomainNameAPI SDK-larındakı kimi)  |
+| `DNA_BASE_URL`    | xüsusi baza URL, məsələn proksi                               |
 
 ```go
-resellerID := "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-apiKey := "your-api-key"
-
-// Canlı mühit
-client := dna.New(resellerID, apiKey, false)
-
-// Test (OTE) mühiti
-client = dna.New(resellerID, apiKey, true)
+client, err := dna.NewClientFromEnv(dna.WithUserAgent("my-panel/1.4"))
 ```
 
-Hər iki giriş məlumatının əvvəlindəki və sonundakı boşluqlar silinir. Üçüncü arqument panellərin
-onay qutuları üçün saxladığı sətirləri də qəbul edir: `"true"`, `"1"`, `"on"` və `"yes"` (böyük-kiçik
-hərfdən asılı olmayaraq) test mühitini seçir, qalan hər şey (`"false"`, `"0"`, `"off"`, `""`, ...)
-canlı mühiti seçir.
+Yanlış açar və ya mühit ilk sorğuda `KindAuth` növündə və bir işarə (hint) ilə `*APIError` xətası verir;
+yoxlamağın ən ucuz yolu `client.Account.Get(ctx)` çağırışıdır.
 
-## Sürətli başlanğıc
+## Servislər
+
+| Servis            | CLI qrupu     | Əməliyyatlar                                                                                                                                                      |
+|-------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `client.Account`  | `dna account` | `Get`, `Transactions`, `AllTransactions`                                                                                                                          |
+| `client.Contacts` | `dna contact` | `Get`, `Create`, `Update`, `Verification`, `ResendVerification`                                                                                                   |
+| `client.Domains`  | `dna domain`  | `Search`, `BulkSearch`, `List`, `All`, `Info`, `Register`, `RegisterWithContacts`, `Renew`, `RenewCheck`, `Restore`, `Transfer`, `TransferCheck`, `TransferStatus`, `Lock`, `Unlock`, `SetPrivacy`, `UpdateAuthCode`, `SetNameServers`, `AddHost`, `UpdateHost`, `DeleteHost`, `UpdateContacts`, `SetContactHandles`, `Documents`, `UploadDocuments`, `Forwarding`, `SetForwarding`, `DeleteForwarding` |
+| `client.DNS`      | `dna dns`     | `List`, `Add`, `Update`, `Delete`, `Apply`                                                                                                                        |
+| `client.DNSSEC`   | `dna dnssec`  | `Get`, `Add`, `Remove`, `Disable`                                                                                                                                 |
+| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Approvers`, `Revoke`                                                |
+| `client.Hosting`  | `dna hosting` | `Packages`, `Plans`, `Create`, `Wait`, `Get`, `GetByToken`, `Status`                                                                                              |
+| `client.Orders`   | `dna order`   | `Get`                                                                                                                                                             |
+| `client.Products` | `dna product` | `List`, `Info`, `TLDs`, `AllTLDs`, `TLD`, `SSLs`                                                                                                                  |
+
+Metodlar məcburi girişləri arqument kimi qəbul edir (`Info(ctx, "example.com")`); əməliyyatın isteğe bağlı
+girişləri varsa, sorğu struct-ı qəbul edir (`Register(ctx, dna.DomainRegisterRequest{...})`). Hər sahəni əhatə
+edən tam sorğu-məlumat [pkg.go.dev](https://pkg.go.dev/github.com/domainreseller/go-dna/v2) ünvanındadır.
+
+## Nümunələr
+
+Bütün kod parçaları `ctx := context.Background()` və bir `client` olduğunu fərz edir.
+
+### Axtarış
 
 ```go
-package main
+a, err := client.Domains.Search(ctx, "example.com")
+// a.Available(), a.Price, a.Currency, a.IsPremium, a.IsDocumentRequired, a.Reason
 
-import (
-	"fmt"
-
-	dna "github.com/domainreseller/go-dna"
-)
-
-func main() {
-	client := dna.New("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "your-api-key", false)
-
-	result := client.GetDetails("example.com")
-	if result["result"] != "OK" {
-		e := result["error"].(map[string]any)
-		fmt.Println("Error:", e["Code"], e["Message"], e["Details"])
-		return
-	}
-	data := result["data"].(map[string]any)
-	fmt.Println(data["DomainName"], data["Status"], data["Dates"].(map[string]any)["Expiration"])
+results, err := client.Domains.BulkSearch(ctx, "example.com", "example.net", "example.org")
+for _, r := range results {
+	fmt.Println(r.DomainName, r.Status, r.Price)
 }
 ```
 
-## Qaytarılan dəyərlər
+`BulkSearch` 30 domendən uzun siyahıları bir neçə sorğuya bölür. Qiymətlər hesabın valyutası ilə və ya
+`dna.WithCurrency("TRY")` ilə təyin edilmiş valyuta ilə gəlir.
 
-Metodlar tipli modellər deyil, php-dna-nın qaytardığı eyni dinamik strukturları — `map[string]any`
-və `[]any` — qaytarır; beləliklə açarlar, sətir bayraqları (`"true"`/`"false"`) və formatlanmış pul
-sətirləri (`"11.9900"`) php-dna-dakı ilə tam eynidir. Gateway-dən gələn ədədlər `int64` və ya
-`float64` tipindədir.
+### Qeydiyyat
 
-Uğurlu çağırışlar belə görünür:
+Kontakt handle-ları ilə (birini `Contacts.Create` ilə yaradın):
 
 ```go
-map[string]any{"result": "OK", "data": map[string]any{ /* ... */ }}
-```
+handle, err := client.Contacts.Create(ctx, dna.Contact{
+	FirstName: "Ada", LastName: "Lovelace", Email: "ada@example.com",
+	Address: "1 Example Street", City: "Istanbul", State: "Istanbul", PostalCode: "34000",
+	Country: "TR", PhoneCountryCode: "90", Phone: "5551234567",
+})
 
-Uğursuz çağırışlar heç vaxt panic yaratmır; onlar xəta zərfini qaytarır:
-
-```go
-map[string]any{
-	"result": "ERROR",
-	"error": map[string]any{
-		"Code":        "API_404", // API_<HTTP statusu>, CURL_<n> və ya RESPONSE kimi kitabxana kodu
-		"Message":     "The domain name you requested could not be found. Please check and try again.",
-		"Details":     "The domain could not be found. Please check and try again.",
-		"GatewayCode": "Dna.DomainService:Domain:10007", // yalnız API_<status> ilə, gateway öz kodunu göndərdikdə
-	},
-}
-```
-
-Üç metod php-dna-da olduğu kimi fərqli formadan istifadə edir:
-
-| Metod | Uğur | Uğursuzluq |
-|---|---|---|
-| `CheckAvailability` | sadə `[]any` siyahısı | xəta zərfi (`map[string]any`), buna görə qaytarılan tip `any`-dir |
-| `GetCurrentBalance` | `OperationResult: "SUCCESS"` zərfi | `OperationResult: "FAILED"` olan eyni zərf |
-| `GetResellerDetails` | düz map (`id`, `name`, `balance`, `balances`, ...) | xəta zərfi |
-
-### İstəyə bağlı arqumentlər
-
-Go-da standart arqumentlər yoxdur. Metodlar php-dna-nın parametr sırasını saxlayır və hər arqumenti
-açıq şəkildə qəbul edir; php-dna-nın standart dəyəri aşağıdakı hər bölmədə göstərilib. Rahatlıq üçün
-bəzi sıfır dəyərlər standart dəyəri seçir: `GetCurrentBalance("")` USD, `GetTldList(0)` 20,
-`CheckAvailability(..., "")` `create`, `SetForwarding(..., "")` isə `Standard` deməkdir.
-`RegisterWithContactInfo` dörd istəyə bağlı arqumentini `*RegisterOptions` daxilində qəbul edir
-(nil = standart dəyərlər). `AddResourceRecordValue` və `ReplaceResourceRecordValue` `ttl *int` qəbul
-edir: `nil` dəstin cari TTL-ini saxlayır.
-
-### Əlaqələr
-
-Əlaqələr php-dna açarları (`FirstName`, `LastName`, `Company`, `EMail`, `AddressLine1`,
-`AddressLine2`, `City`, `State`, `Country`, `ZipCode`, `Phone`, `PhoneCountryCode`, `Fax`,
-`FaxCountryCode`) olan `map[string]any`-dir. İç-içə forma (`Address.Line1`,
-`Phone.Phone.Number`, ...) da qəbul edilir. Go map-lərində sıra olmadığı üçün dörd rol sıralı
-`dna.Contacts` siyahısı kimi ötürülür:
-
-```go
-contacts := dna.Contacts{
-	{Role: "Administrative", Contact: contact},
-	{Role: "Billing", Contact: contact},
-	{Role: "Technical", Contact: contact},
-	{Role: "Registrant", Contact: contact},
-}
-contacts = dna.AllRoles(contact)                 // dörd rolun hamısı üçün eyni əlaqə
-contacts = dna.ContactsFromMap(map[string]map[string]any{ /* rol => əlaqə */ })
-```
-
-Yarımçıq doldurulmuş əlaqələr göndərilməzdən əvvəl `ValidateContact` qaydalarına əsasən tamamlanır.
-Əlaqələrdən `RegisterWithContactInfo` və `SaveContacts` istifadə edir; transferlər heç vaxt əlaqə
-göndərmir.
-
-### Metod adları
-
-Go metod adları Go konvensiyalarına uyğundur; php-dna adı lowerCamelCase formatında eynidir.
-`getServiceUrl`/`setServiceUrl` `GetServiceURL`/`SetServiceURL`, `setSslVerification` isə
-`SetSSLVerification` adlanır.
-
-## İstifadə
-
-### Domen Qeydiyyatı
-
-php-dna standart dəyərləri: standart nameserver-lər (`ns1.domainnameapi.com`,
-`ns2.domainnameapi.com`), EPP kilidi aktiv, məxfilik deaktiv, əlavə atributlar yoxdur. Əlavə
-atributlar yalnız `.tr` kimi domenlər üçün tələb olunur.
-
-```go
-contact := map[string]any{
-	"FirstName":        "John",
-	"LastName":         "Doe",
-	"Company":          "Example Corp",
-	"EMail":            "john.doe@example.com",
-	"AddressLine1":     "123 Lorem Street",
-	"AddressLine2":     "Suite 456",
-	"City":             "Springfield",
-	"Country":          "US",
-	"Fax":              "1234567890",
-	"FaxCountryCode":   "1",
-	"Phone":            "9876543210",
-	"PhoneCountryCode": 1,
-	"ZipCode":          "12345",
-	"State":            "IL",
-}
-
-opts := dna.DefaultRegisterOptions()
-opts.NameServers = []string{"ns1.example.com", "ns2.example.com"}
-opts.EppLock = true
-opts.PrivacyLock = false
-// Yalnız .tr domenləri üçün:
-opts.AdditionalAttributes = map[string]any{
-	"TRABISDOMAINCATEGORY": 1,             // 1 = fərdi şəxs (Owner), 0 = şirkət (Corporate)
-	"TRABISCITIZIENID":     "12345678901", // və ya şirkətlər üçün TRABISTAXOFFICE + TRABISTAXNUMBER
-}
-
-result := client.RegisterWithContactInfo("example.com", 1, dna.AllRoles(contact), opts)
-```
-
-`.tr` domenləri üçün köhnə TRABIS adları gateway sxeminə uyğun normallaşdırılır: kateqoriya
-`Owner`/`Corporate` olur, `TRABISCITIZIENID` `TRABISCITIZENID`-ə çevrilir, ölkə, şəhər, ad və təşkilat
-sahələri isə çıxarılır (gateway onları əlaqədən götürür). Hər atribut dəyəri sətir kimi göndərilir.
-
-<details>
-<summary>Domen Qeydiyyatı üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"ID":                      int64(0),
-		"Status":                  "Active",
-		"DomainName":              "",
-		"AuthCode":                "",
-		"LockStatus":              "false",
-		"PrivacyProtectionStatus": "false",
-		"IsChildNameServer":       "false",
-		"Contacts": map[string]any{
-			"Billing":        map[string]any{"ID": int64(0)},
-			"Technical":      map[string]any{"ID": int64(0)},
-			"Administrative": map[string]any{"ID": int64(0)},
-			"Registrant":     map[string]any{"ID": int64(0)},
-		},
-		"Dates": map[string]any{
-			"Start":         "",
-			"Expiration":    "2027-11-09T12:00:00",
-			"RemainingDays": int64(365),
-		},
-		"NameServers":      []any{},
-		"Additional":       []any{},
-		"ChildNameServers": []any{},
-	},
-}
-```
-
-Qeydiyyat endpoint-i qısa bir qeydlə cavab verir, buna görə sahələrin çoxu boşdur; tam domen
-məlumatları üçün sonra `GetDetails` çağırın. Gateway qeydiyyatı rədd etdikdə (`"success": false` ilə
-HTTP 200) nəticə `REGISTER_DOMAIN` kodu və gateway-in mesajı ilə xəta olur.
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domen Yenilənməsi
-
-```go
-result := client.Renew("example.com", 1)
-```
-
-<details>
-<summary>Domen Yenilənməsi üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"ExpirationDate": "2026-03-15T10:00:00"}}
-```
-
-Gateway-in rəddi (`"success": false`) `RENEW_DOMAIN` kodunu qaytarır; bitmə tarixi olmayan uğurlu
-cavab isə `DOMAIN_RENEW` qaytarır.
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domen Transferi
-
-```go
-result := client.Transfer("example.com", "Xy9#mK2$", 1)
-```
-
-Transferlər heç vaxt əlaqə göndərmir: qeydiyyatçı onları domenlə birlikdə təhvil alır, buna görə
-sorğu həmişə boş əlaqə siyahısı daşıyır və metodun əlaqələr parametri yoxdur. Nəticə `GetDetails` ilə
-eyni formadadır; gateway-in rəddi (`"success": false`) gateway-in mesajı ilə `TRANSFER_DOMAIN` kodunu
-qaytarır.
-
-<details>
-<summary>Domen Transferi üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"ID": int64(0), "Status": "Active", "DomainName": "", "AuthCode": "",
-		"LockStatus": "false", "PrivacyProtectionStatus": "false", "IsChildNameServer": "false",
-		"Contacts": map[string]any{ /* Billing, Technical, Administrative, Registrant: {"ID": 0} */ },
-		"Dates": map[string]any{"Start": "", "Expiration": "2027-11-09T12:00:00", "RemainingDays": int64(365)},
-		"NameServers": []any{}, "Additional": []any{}, "ChildNameServers": []any{},
-	},
-}
-```
-
-</details>
-
-Əlaqəli transfer çağırışları:
-
-```go
-client.CancelTransfer("example.com")  // {"result": "OK", "data": {"DomainName": "example.com", "Status": "Cancelled"}}
-client.ApproveTransfer("example.com") // {"result": "OK", "data": {"DomainName": "example.com", "Status": "Approved"}}
-client.RejectTransfer("example.com")  // {"result": "OK", "data": {"DomainName": "example.com", "Status": "Rejected"}}
-```
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Transfer Yoxlaması
-
-```go
-result := client.CheckTransfer("example.com", "Ab1!xyZ9")
-```
-
-`result` yalnız registry domenin transfer edilə bilən olduğunu bildirdikdə `OK` olur; əks halda
-`TRANSFER_NOT_AVAILABLE` kodu və eyni `data` ilə `ERROR` olur.
-
-<details>
-<summary>Transfer Yoxlaması üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"TransferAvailabilityStatus": true,
-		"AuthCodeIsRequired":         true,
-		"AuthCodeIsValid":            true,
-		"UserTransferRequired":       false,
-		"TransferLock":               false,
-		"Message":                    "Domain can be transferred",
-		"MessageKey":                 "TransferAvailable",
-		"Additional":                 []any{},
-	},
-}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domen Siyahısı
-
-```go
-result := client.GetList(map[string]any{
-	"OrderColumn":    "Id",
-	"OrderDirection": "ASC",
-	"PageNumber":     0,
-	"PageSize":       1000,
+res, err := client.Domains.Register(ctx, dna.DomainRegisterRequest{
+	DomainName:  "example.com",
+	Years:       1,
+	NameServers: []string{"ns1.example.net", "ns2.example.net"},
+	Handles:     dna.SameHandle(handle), // və ya dna.ContactHandles{Registrant: "DNA-1", Admin: "DNA-2", ...}
 })
 ```
 
-`PageNumber` (0-dan başlayır), `PageSize`, `OrderColumn` və `OrderDirection` gateway-in `SkipCount`,
-`MaxResultCount` və `Sorting` parametrlərinə çevrilir; digər açarlar (məsələn, `DomainName`) filtr
-kimi ötürülür. `nil` ilk 200 domeni qaytarır.
-
-<details>
-<summary>Domen Siyahısı üçün Nümunə Çıxış</summary>
+Sətir daxili kontaktlarla:
 
 ```go
-map[string]any{
-	"result":     "OK",
-	"TotalCount": int64(1),
-	"data": map[string]any{
-		"Domains": []any{
-			map[string]any{
-				"ID":                      int64(564346),
-				"Status":                  "Active",
-				"DomainName":              "example.com",
-				"AuthCode":                "",
-				"LockStatus":              "true",
-				"PrivacyProtectionStatus": "false",
-				"IsChildNameServer":       "false",
-				"Contacts": map[string]any{
-					"Billing":        map[string]any{"ID": ""},
-					"Technical":      map[string]any{"ID": ""},
-					"Administrative": map[string]any{"ID": ""},
-					"Registrant":     map[string]any{"ID": ""},
-				},
-				"Dates": map[string]any{
-					"Start":         "2024-03-15T10:20:30",
-					"Expiration":    "2027-03-15T10:20:30",
-					"RemainingDays": int64(126),
-				},
-				"NameServers":      []any{"ns1.example.com", "ns2.example.com"},
-				"Additional":       []any{},
-				"ChildNameServers": []any{},
-			},
-		},
-	},
+res, err := client.Domains.RegisterWithContacts(ctx, dna.DomainRegisterWithContactsRequest{
+	DomainName:  "example.com",
+	NameServers: []string{"ns1.example.net", "ns2.example.net"},
+	Contacts:    dna.SameContact(owner), // və ya dna.DomainContacts{Registrant: &owner, Admin: &admin, ...}
+})
+```
+
+Kontaktlar göndərilməzdən əvvəl səliqəyə salınır: sahələrin əvvəlindəki və sonundakı boşluqlar silinir, ölkə
+kodu böyük hərflərə çevrilir, telefon sahələrində isə yalnız rəqəmlər saxlanılır (`"+90 (555) 123-45-67"`
+işləyir). Bəzi TLD-lər reyestr (registry) atributları tələb edir: onları `client.Products.TLD(ctx, "com.tr")`
+və `RequiredAttributes()` ilə tapın, `TLDAttributes` kimi ötürün.
+
+API cavab verib sorğunu rədd edərsə (`"success": false`), xəta API-nin mesajını daşıyan
+`*dna.OperationError` olur.
+
+### Yenilənmə, transfer, bərpa
+
+```go
+check, err := client.Domains.RenewCheck(ctx, "example.com", 1) // check.Renewable, check.PremiumPrice
+res, err := client.Domains.Renew(ctx, "example.com", 1)
+
+tc, err := client.Domains.TransferCheck(ctx, "example.com", "auth-code") // tc.Transferable, tc.AuthCodeValid
+res, err := client.Domains.Transfer(ctx, dna.DomainTransferRequest{DomainName: "example.com", AuthCode: "auth-code"})
+st, err := client.Domains.TransferStatus(ctx, "example.com")
+
+err = client.Domains.Restore(ctx, "example.com") // bərpa (redemption) dövründə
+```
+
+### Domen təfərrüatları və domen siyahısı
+
+```go
+d, err := client.Domains.Info(ctx, "example.com")
+fmt.Println(d.Status, d.ExpirationDate, d.RemainingDays, d.Locked, d.NameServers, d.AuthCode)
+if owner, ok := d.Contact(dna.ContactTypeRegistrant); ok {
+	fmt.Println(owner.Email)
+}
+
+// Bir səhifə
+page, err := client.Domains.List(ctx, dna.DomainListRequest{ListOptions: dna.ListOptions{Limit: 50}})
+
+// Bütün domenlər; səhifələr sizin üçün gətirilir
+for d, err := range client.Domains.All(ctx, dna.DomainListRequest{
+	Statuses: []dna.DomainStatus{dna.DomainStatusActive},
+}) {
+	if err != nil {
+		return err
+	}
+	fmt.Println(d.DomainName, d.ExpirationDate)
 }
 ```
 
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### TLD Siyahısı
+### Kilid, məxfilik, name server-lər, child name server-lər
 
 ```go
-result := client.GetTldList(100) // php-dna standart dəyəri: 20
+err = client.Domains.Lock(ctx, "example.com")
+err = client.Domains.Unlock(ctx, "example.com")
+err = client.Domains.SetPrivacy(ctx, "example.com", true)
+code, err := client.Domains.UpdateAuthCode(ctx, "example.com")
+
+err = client.Domains.SetNameServers(ctx, dna.DomainNameServersSetRequest{
+	DomainName:  "example.com",
+	NameServers: []string{"ns1.example.net", "ns2.example.net"},
+	// DNSSECMode: dna.DNSSECModeDisable, // yalnız DNSSEC ilə imzalanmış domenlər üçün
+})
+
+err = client.Domains.AddHost(ctx, "example.com", "ns1.example.com", "192.0.2.10", "2001:db8::10") // IP versiyası avtomatik aşkarlanır
+err = client.Domains.DeleteHost(ctx, "example.com", "ns1.example.com")
 ```
 
-<details>
-<summary>TLD Siyahısı üçün Nümunə Çıxış</summary>
+### Domenin kontaktları
 
 ```go
-map[string]any{
-	"result": "OK",
-	"data": []any{
-		map[string]any{
-			"id": int64(1), "status": "Active", "tld": "com",
-			"maxchar": int64(63), "maxperiod": int64(10), "minchar": int64(1), "minperiod": int64(1),
-			"pricing": map[string]any{
-				"registration": map[string]any{"1": "10.8100", "2": "21.6200"},
-				"renew":        map[string]any{"1": "11.0100"},
-				"transfer":     map[string]any{"1": "10.6100"},
-				"restore":      map[string]any{"1": "99.9000"},
-			},
-			"currencies": map[string]any{
-				"registration": "USD", "renew": "USD", "transfer": "USD", "restore": "USD",
-			},
-		},
-	},
+err = client.Domains.SetContactHandles(ctx, "example.com", dna.ContactHandles{Admin: "DNA-2", Tech: "DNA-2"})
+err = client.Domains.UpdateContacts(ctx, "example.com", dna.DomainContacts{Billing: &billing})
+
+details, err := client.Contacts.Get(ctx, "DNA-1")           // kontakt və onun doğrulama vəziyyəti
+result, err := client.Contacts.Update(ctx, "DNA-1", contact) // handle-dan istifadə edən bütün domenləri yeniləyir
+```
+
+### DNS zonası
+
+```go
+err = client.DNS.Add(ctx, dna.DNSAddRequest{
+	DomainName: "example.com", Name: "www", Type: dna.RecordTypeA, TTL: 600, Values: []string{"192.0.2.10"},
+})
+err = client.DNS.Update(ctx, dna.DNSUpdateRequest{ // çoxluqdakı bütün dəyərləri əvəz edir
+	DomainName: "example.com", RecordName: "www", Type: dna.RecordTypeA, Values: []string{"192.0.2.20"},
+})
+err = client.DNS.Delete(ctx, dna.DNSDeleteRequest{
+	DomainName: "example.com", Name: "www", Type: dna.RecordTypeA, Value: "192.0.2.20",
+})
+
+sets, err := client.DNS.List(ctx, "example.com")
+for _, s := range sets {
+	fmt.Println(s.Name, s.Type, s.TTL, s.Values())
+}
+
+res, err := client.DNS.Apply(ctx, "example.com") // domeni platformanın name server-lərinə keçirir
+```
+
+Adlar nisbi (`www`), kök (`""` və ya `"@"`) ya da tam ixtisaslaşmış ola bilər. Qeyd növləri burada böyük/kiçik
+hərfə həssas deyil (`"txt"`, `TXT` kimi göndərilir). Doğrulama API-nin rədd edəcəyi halları tutur: kökdə
+CNAME, üç hissəsi olmayan CAA dəyəri, prioriteti olmayan MX dəyəri. Test mühiti hər zona çağırışına HTTP 500
+ilə cavab verir; buna görə zona kodunu yalnız production-da sınamaq mümkündür.
+
+### DNSSEC
+
+```go
+ds, err := dna.ParseDS("2371 13 2 1F987CC6583E92DF0890718C42...") // DNS provayderinizin göstərdiyi şəkildə
+results, err := client.DNSSEC.Add(ctx, "example.com", ds)
+info, err := client.DNSSEC.Get(ctx, "example.com") // info.Status, info.DSRecords
+res, err := client.DNSSEC.Disable(ctx, "example.com")
+```
+
+### URL yönləndirmə
+
+```go
+err = client.Domains.SetForwarding(ctx, "example.com", "https://www.example.org", dna.ForwardTypeStandard)
+f, err := client.Domains.Forwarding(ctx, "example.com") // domendə yönləndirmə yoxdursa nil
+err = client.Domains.DeleteForwarding(ctx, "example.com")
+```
+
+### Reyestr sənədləri (.tr)
+
+```go
+doc, err := dna.DocumentFromFile(dna.DocumentTypeIdentityCard, "id.pdf")
+res, err := client.Domains.UploadDocuments(ctx, "example.com.tr", doc)
+page, err := client.Domains.Documents(ctx, dna.DomainDocumentsListRequest{DomainName: "example.com.tr"})
+```
+
+Fayllar sizin üçün base64 ilə kodlaşdırılır; format (PDF, JPG, PNG, DOC, DOCX, ODT) və ölçü (hər fayl üçün 10 MB,
+hər sorğu üçün 50 MB) yükləmədən əvvəl yoxlanılır.
+
+### SSL sertifikatları
+
+```go
+csr, err := client.SSL.GenerateCSR(ctx, dna.SSLGenerateCSRRequest{
+	DomainName: "example.com", Country: "TR", State: "Istanbul", Locality: "Istanbul",
+	Organization: "Example Ltd", OrganizationUnit: "IT",
+})
+_, err = client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // balansdan ödəniş çıxır
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
+	DomainName: "example.com", CSR: csr.CSR, ApproverMail: "admin@example.com",
+	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
+})
+st, err := client.SSL.Status(ctx, "example.com") // st.IsIssued olana qədər sorğulayın
+cert, err := client.SSL.Content(ctx, "example.com")
+os.WriteFile("example.com.crt", []byte(cert.Chain()), 0o644)
+```
+
+### Hosting
+
+```go
+packages, err := client.Hosting.Packages(ctx)
+created, err := client.Hosting.Create(ctx, "example.com", "Linux-Starter") // balansdan ödəniş çıxır
+
+ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+defer cancel()
+st, err := client.Hosting.Wait(ctx, created.ServiceID) // aktiv olana qədər sorğulayır
+fmt.Println(st.PanelAddress, st.Username, st.Password)
+```
+
+Hələ hazırlanmaqda olan hosting üçün `Create`-i bir daha çağırmayın: iki dəfə ödəniş çıxılır.
+
+### Balans, qiymətlər və sifarişlər
+
+```go
+account, err := client.Account.Get(ctx)
+usd, _ := account.Balance("USD")
+
+for tx, err := range client.Account.AllTransactions(ctx, dna.AccountTransactionsRequest{From: monthStart}) {
+	if err != nil {
+		return err
+	}
+	fmt.Println(tx.CreationTime, tx.Type, tx.Change())
+}
+
+if tld, err := client.Products.TLD(ctx, "com.tr"); err == nil && tld != nil {
+	price, _ := tld.RegisterPrice(1)
+	fmt.Println(tld.Name, price)
+}
+
+info, err := client.Products.Info(ctx, "com", dna.OrderRenew, 2) // 2 illik .com yenilənməsinin qiyməti
+order, err := client.Orders.Get(ctx, "ORDER-CODE")
+```
+
+## Sorğular və BaseRequest
+
+Hər API əməliyyatı bir sorğu tipidir: `DomainInfoRequest`, `DNSAddRequest`, `SSLConfigureRequest`, ... Hamısı bir
+interfeysi həyata keçirir:
+
+```go
+type Request interface {
+	Endpoint() Endpoint      // metod, yol və təhlükəsizlik sinfi
+	Query() url.Values       // query sətri və ya nil
+	Body() any               // JSON gövdəsi və ya nil
+	Validate() error         // hər hansı bir şey göndərilməzdən əvvəl yoxlanılır
 }
 ```
 
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domen Mövcudluğunun Yoxlanması
+Go-da varislik yoxdur; buna görə "baza sinif" embed etdiyiniz bir struct-dır. `dna.BaseRequest` susmaya görə
+davranışları təmin edir (query yoxdur, gövdə yoxdur, doğrulanacaq bir şey yoxdur); sorğu metodu öz tipində
+təyin etməklə onu əvəz edir. Yalnız `Endpoint` üçün susmaya görə variant yoxdur. Bu paketdəki sorğu belə görünür:
 
 ```go
-result := client.CheckAvailability([]string{"hello", "world123x0"}, []string{"com", "net"}, 1, "create")
-if list, ok := result.([]any); ok {
-	// uğurlu
-	_ = list
+type DomainRenewRequest struct {
+	BaseRequest
+	DomainName string
+	Years      int
+}
+
+func (DomainRenewRequest) Endpoint() Endpoint {
+	return Endpoint{Method: http.MethodPost, Path: "/api/v1/domains/renew", Safety: Billable}
+}
+
+func (r DomainRenewRequest) Body() any { return domainBody(r.DomainName).set("period", r.Years) }
+
+func (r DomainRenewRequest) Validate() error {
+	var v validator
+	v.required("domainName", r.DomainName)
+	v.check(r.Years >= 1 && r.Years <= 10, "years", "must be between 1 and 10")
+	return v.err()
 }
 ```
 
-<details>
-<summary>Domen Mövcudluğunun Yoxlanması üçün Nümunə Çıxış</summary>
+Servis metodları bunları sizin üçün yaradır. `client.Do`, öz tipləriniz də daxil olmaqla, istənilən `Request`-i
+göndərir; məsələn, yalnız lazım olan sahələri oxumaq və ya bu paketin hələ əhatə etmədiyi endpoint-i
+çağırmaq üçün:
 
 ```go
-[]any{
-	map[string]any{
-		"TLD": "com", "DomainName": "hello", "Status": "notavailable", "Command": "create",
-		"Period": int64(1), "IsFee": false, "Price": "10.8100", "Currency": "USD", "Reason": "Domain exists",
-	},
-	map[string]any{
-		"TLD": "com", "DomainName": "world123x0", "Status": "available", "Command": "create",
-		"Period": int64(1), "IsFee": false, "Price": "10.8100", "Currency": "USD", "Reason": nil,
-	},
+type ExpiryRequest struct {
+	dna.BaseRequest
+	DomainName string
+}
+
+func (ExpiryRequest) Endpoint() dna.Endpoint {
+	return dna.Endpoint{Method: http.MethodGet, Path: "/api/v1/domains/info", Safety: dna.Read}
+}
+
+func (r ExpiryRequest) Query() url.Values { return url.Values{"DomainName": {r.DomainName}} }
+
+var out struct {
+	ExpirationDate dna.Time `json:"expirationDate"`
+}
+resp, err := client.Do(ctx, ExpiryRequest{DomainName: "example.com"}, &out)
+```
+
+Sorğunuz daxili sorğuların aldığı hər şeyi alır: giriş məlumatları, təkrar cəhdlər, sürət tənzimi, xətaların
+normallaşdırılması, korrelyasiya ID-ləri, izləmə və yalnız oxumaq məhdudiyyəti. `client.NewHTTPRequest(ctx, req)`
+ödənişli sorğunu göndərilməzdən əvvəl loglamaq və ya nəzərdən keçirmək üçün dəqiq HTTP sorğusunu göndərmədən
+qurur.
+
+## Xətalar
+
+| Xəta                   | Nə vaxt                                                    | Faydalı sahələr                                                  |
+|------------------------|------------------------------------------------------------|------------------------------------------------------------------|
+| `*dna.InputError`      | `Validate` sorğunu rədd etdi; **heç nə göndərilmədi**      | `Request`, `Fields`                                              |
+| `*dna.APIError`        | API 2xx olmayan status ilə cavab verdi                     | `StatusCode`, `Code`, `Message`, `Details`, `Fields`, `Data`, `CorrelationID`, `Hint()` |
+| `*dna.OperationError`  | API 2xx və `"success": false` ilə cavab verdi              | `Code`, `Message`, `CorrelationID`                               |
+| `*dna.NetworkError`    | sorğu tamamlanmadı (DNS, TLS, vaxt aşımı, bağlantının kəsilməsi) | `Err`, `Timeout()`                                         |
+| `dna.ErrReadOnly`      | yalnız oxumaq rejimindəki klient dəyişikliyi blokladı; heç nə göndərilmədi | `errors.Is` istifadə edin                    |
+
+`dna.KindOf(err)` bunların hamısını təsnif edir: `KindAuth`, `KindNotFound`, `KindValidation`, `KindRejected`,
+`KindConflict`, `KindRateLimited`, `KindServer`, `KindNetwork`, `KindInvalidInput`, `KindReadOnly`. Köməkçi
+funksiyalar tez-tez verilən suallara cavab verir:
+
+```go
+_, err := client.Domains.Renew(ctx, "example.com", 1)
+var apiErr *dna.APIError
+switch {
+case err == nil:
+case dna.OutcomeUnknown(err):
+	// Yenilənmə həyata keçmiş ola bilər. Yenidən cəhd etməzdən əvvəl domeni yoxlayın.
+case dna.IsInsufficientBalance(err):
+case dna.IsNotFound(err):
+case dna.HasCode(err, dna.CodePrivacyNotSupported):
+case errors.As(err, &apiErr):
+	log.Println(apiErr.Code, apiErr.Message, apiErr.Hint(), apiErr.CorrelationID)
 }
 ```
 
-Premium domenlər üçün `IsFee` `true` olur.
+`Message` üzrə yox, `Code` üzrə budaqlandırın: mesajlar lokallaşdırılır. API kodları
+`Dna.DomainService:Domain:10007` kimi görünür; [xəta sorğu-məlumatına](https://www.domainnameapi.com/docs/reference/errors.md) baxın.
+Dəstək xidmətinə müraciət edərkən `CorrelationID` dəyərini qeyd edin.
 
-</details>
+## Təhlükəsizlik və etibarlılıq
 
-<hr style="border: 4px solid #000; border-style: dashed;">
+- **Təhlükəsizlik sinifləri.** Hər sorğu `Read`, `Write`, `Destructive` və ya `Billable` sinfindədir (`req.Endpoint().Safety`).
+  Bəzi POST və PUT sorğuları oxumadır (`DomainSearchRequest`, `SSLStatusRequest`).
+- **Yalnız oxumaq rejimi.** `dna.WithReadOnly()` oxuma olmayan hər şeyi bloklayır; hesabat işləri və production-u
+  təhlükəsiz araşdırmaq üçündür.
+- **Təkrar cəhdlər.** 429 cavabları həmişə, `Retry-After` nəzərə alınmaqla təkrarlanır: API onları heç bir
+  əməliyyat etmədən rədd edir. Şəbəkə xətaları və 502/503/504 yalnız oxumalar və idempotent yazmalar üçün
+  təkrarlanır; beləliklə qeydiyyat və ya yenilənmə heç vaxt iki dəfə göndərilmir. Ödənişli sorğu uğursuz
+  olduqdan sonra `dna.OutcomeUnknown(err)` dəyərini yoxlayın.
+- **Sürət tənzimi.** Klient açar başına limitlərin altında qalmaq üçün sorğular arasında fasilə qoyur (saniyədə 5 sorğu,
+  saniyədə 2 axtarış, saniyədə bir zona çağırışı). Sürəti özünüz tənzimləyirsinizsə, `dna.WithPacing(false)` ilə söndürün.
+- **Kvota.** `Response.Quota` yumşaq kvota başlıqlarını təqdim edir. Limit aşıldıqda API cavabları rədd etmək əvəzinə
+  yavaşladır (ən çoxu 5 san); susmaya görə 60 san vaxt aşımı buna yer buraxır.
+- **Korrelyasiya ID-ləri.** Hər sorğu `X-Correlation-ID` daşıyır. API çağırışlarını loglarınızla əlaqələndirmək üçün
+  `dna.WithCorrelationID(ctx, id)` ilə öz dəyərinizi təyin edin.
+- **Müşahidə oluna bilmə.** `dna.WithLogger(slog.Default())` hər mübadiləni loglayır; `dna.WithTrace(func(dna.TraceEvent))`
+  sizə hər sorğunu, cavabı və təkrar cəhdi ötürür; metrikalar və ya xəta hesabatı üçün istifadə edilə bilər. API
+  açarı onların heç birində yer almır.
+- **Paralellik.** `Client` eyni vaxtda istifadə üçün təhlükəsizdir. Bir dənə yaradın və paylaşın.
+- **Tolerant dekodlama.** Saat qurşağı olmayan tarixlər, `null`, `{}` əvəzinə `[]`, rəqəmli və ya adlı statuslar
+  və istənilən hərf registrində rollar (`"registrant"`, `"ADMINISTRATIVE"`) dekodlanır.
 
-### Domen Məlumatları
+## Client seçimləri
 
-```go
-result := client.GetDetails("example.com")
-result = client.SyncFromRegistry("example.com") // eyni forma
-```
+| Seçim                           | Təsiri                                                                                   |
+|---------------------------------|------------------------------------------------------------------------------------------|
+| `WithEnvironment(dna.OTE)`      | test mühitindən istifadə edir (susmaya görə `dna.Production`)                            |
+| `WithBaseURL(url)`              | sorğuları proksiyə və ya test serverinə göndərir                                         |
+| `WithHTTPClient(hc)`            | öz `*http.Client`-iniz (transport, proksi, TLS); yönləndirmələr heç vaxt izlənmir        |
+| `WithTimeout(d)`                | cəhd başına vaxt aşımı (susmaya görə 60 san)                                             |
+| `WithUserAgent("app/1.0")`      | məhsulunuzu User-Agent-in əvvəlinə əlavə edir                                            |
+| `WithCurrency("TRY")`           | axtarış və kataloq qiymətlərinin valyutası                                               |
+| `WithRetries(n)`                | təkrar cəhd sayı (susmaya görə 2)                                                        |
+| `WithPacing(false)`             | klient tərəfi sürət tənzimini söndürür                                                   |
+| `WithReadOnly()`                | oxuma olmayan hər sorğunu bloklayır                                                      |
+| `WithLogger(l)`                 | mübadilələri `*slog.Logger`-ə loglayır                                                   |
+| `WithTrace(fn)`                 | hər sorğunu, cavabı və təkrar cəhdi müşahidə edir                                        |
 
-<details>
-<summary>Domen Məlumatları üçün Nümunə Çıxış</summary>
+## Kodunuzun test edilməsi
 
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"ID":                      int64(564346),
-		"Status":                  "Active",
-		"DomainName":              "example.com",
-		"AuthCode":                "DHQ!K52",
-		"LockStatus":              "true",
-		"PrivacyProtectionStatus": "false",
-		"IsChildNameServer":       "true",
-		"Contacts": map[string]any{
-			"Billing":        map[string]any{"ID": "DNA-B-4"},
-			"Technical":      map[string]any{"ID": "DNA-T-3"},
-			"Administrative": map[string]any{"ID": "DNA-A-2"},
-			"Registrant":     map[string]any{"ID": "DNA-R-1"},
-		},
-		"Dates": map[string]any{
-			"Start":         "2024-03-15T10:20:30",
-			"Expiration":    "2027-03-15T10:20:30",
-			"RemainingDays": int64(126),
-		},
-		"NameServers":      []any{"ns1.example.com", "ns2.example.com"},
-		"Additional":       map[string]any{"TRABISDOMAINCATEGORY": "1"},
-		"ChildNameServers": []any{map[string]any{"ns": "ns1.example.com", "ip": "1.2.3.4"}},
-	},
-}
-```
-
-Gateway rəqəmsal enum göndərsə belə, `Status` mətn etiketidir (`Active`, `TransferredOut`,
-`PendingDelete`, ...). Təhlil edilə bilməyən tarixlər `""` olur, heç vaxt yanlış 1970 tarixi olmur.
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Nameserver Dəyişdirmə
+Klienti `httptest.Server`-ə yönəldin; başqa heç nəyi mock etmək lazım deyil:
 
 ```go
-result := client.ModifyNameServer("example.com", []string{"ns1.example.com", "ns2.example.com"})
+srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprint(w, `{"success":true,"info":{"domainName":"example.com","status":"AVAILABLE","price":11.99,"currency":"USD"}}`)
+}))
+defer srv.Close()
+
+client, _ := dna.NewClient("reseller-id", "api-key", dna.WithBaseURL(srv.URL), dna.WithPacing(false))
+a, err := client.Domains.Search(ctx, "example.com")
 ```
 
-Map də qəbul edilir (onun dəyərləri açar sırası ilə istifadə olunur). Göndərilməzdən əvvəl elementlərin
-boşluqları silinir, kiçik hərfə çevrilir, sondakı nöqtə götürülür və təkrarlar aradan qaldırılır; nəticə həmin normallaşdırılmış siyahını
-göstərir.
-
-<details>
-<summary>Nameserver Dəyişdirmə üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServers": []any{"ns1.example.com", "ns2.example.com"}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domen Kilidini Aktivləşdirmə
-
-```go
-result := client.EnableTheftProtectionLock("example.com")
-```
-
-<details>
-<summary>Domen Kilidini Aktivləşdirmə üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"LockStatus": true}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domen Kilidini Deaktivləşdirmə
-
-```go
-result := client.DisableTheftProtectionLock("example.com")
-```
-
-<details>
-<summary>Domen Kilidini Deaktivləşdirmə üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"LockStatus": false}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Child Nameserver Əlavə Etmək
-
-```go
-result := client.AddChildNameServer("example.com", "ns1.example.com", "1.2.3.4")
-```
-
-<details>
-<summary>Child Nameserver Əlavə Etmək üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServer": "ns1.example.com", "IPAdresses": []any{"1.2.3.4"}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Child Nameserver Silmə
-
-```go
-result := client.DeleteChildNameServer("example.com", "ns1.example.com")
-```
-
-<details>
-<summary>Child Nameserver Silmə üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServer": "ns1.example.com"}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Child Nameserver Yeniləmə
-
-```go
-result := client.ModifyChildNameServer("example.com", "ns1.example.com", "1.2.3.5")
-```
-
-<details>
-<summary>Child Nameserver Yeniləmə üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServer": "ns1.example.com", "IPAdresses": []any{"1.2.3.5"}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domen Məxfiliyini Dəyişdirmə
-
-```go
-result := client.ModifyPrivacyProtectionStatus("example.com", true, "Owner request")
-```
-
-`status` bool və ya panellərin saxladığı dəyərdir: `true`, `1`, `"1"`, `"true"`, `"on"` və `"yes"`
-məxfiliyi aktivləşdirir, qalan hər şey (`"off"`, `"0"`, `false`, ...) onu deaktiv edir. Səbəb yalnız
-php-dna ilə uyğunluq üçün saxlanılır və göndərilmir: gateway-də belə sahə yoxdur.
-
-<details>
-<summary>Domen Məxfiliyini Dəyişdirmə üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"PrivacyProtectionStatus": true}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domen Əlaqələrini Əldə Etmək
-
-```go
-result := client.GetContacts("example.com")
-```
-
-Gateway əlaqə tipləri böyük-kiçik hərfdən asılı olmayaraq uyğunlaşdırılır (`Admin`/`Administrative`,
-`Tech`/`Technical`, `Registrant`/`Owner`, `Billing`); hər hansı digər tip böyük hərflə başlayan öz adı
-altında saxlanılır.
-
-<details>
-<summary>Domen Əlaqələrini Əldə Etmək üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"contacts": map[string]any{
-			"Administrative": map[string]any{
-				"ID": "DNA-A-2", "Status": "Active", "AuthCode": "",
-				"FirstName": "Grace", "LastName": "Hopper", "Company": "", "EMail": "grace@example.com",
-				"Type": "Administrative",
-				"Address": map[string]any{
-					"Line1": "Example Street 2", "Line2": "", "Line3": "",
-					"State": "DC", "City": "Washington", "Country": "US", "ZipCode": "20001",
-				},
-				"Phone": map[string]any{
-					"Phone": map[string]any{"Number": "2025550100", "CountryCode": "1"},
-					"Fax":   map[string]any{"Number": "2025550101", "CountryCode": "1"},
-				},
-				"Additional": []any{},
-			},
-			// "Billing", "Registrant", "Technical": eyni forma
-		},
-	},
-}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Domen Əlaqələrini Saxlamaq
-
-```go
-result := client.SaveContacts("example.com", dna.AllRoles(contact))
-```
-
-<details>
-<summary>Domen Əlaqələrini Saxlamaq üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"contacts": map[string]any{}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Satıcı Təfərrüatlarını Əldə Etmək
-
-```go
-result := client.GetResellerDetails()
-```
-
-<details>
-<summary>Satıcı Təfərrüatlarını Əldə Etmək üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{
-	"result":   "OK",
-	"id":       "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-	"active":   true,
-	"name":     "Example Reseller",
-	"balance":  "601.64",
-	"currency": "USD",
-	"symbol":   "$",
-	"balances": []any{
-		map[string]any{"balance": "601.64", "currency": "USD", "symbol": "$"},
-		map[string]any{"balance": "1250.50", "currency": "TL", "symbol": "TL"},
-	},
-}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Cari Balansı Əldə Etmək
-
-```go
-result := client.GetCurrentBalance("USD") // USD (standart), TRY, EUR və ya GBP
-```
-
-<details>
-<summary>Cari Balansı Əldə Etmək üçün Nümunə Çıxış</summary>
-
-```go
-map[string]any{
-	"ErrorCode":        int64(0),
-	"OperationMessage": "Command completed succesfully.",
-	"OperationResult":  "SUCCESS",
-	"Balance":          "601.64",
-	"CurrencyId":       int64(2),
-	"CurrencyInfo":     nil,
-	"CurrencyName":     "USD",
-	"CurrencySymbol":   "$",
-}
-```
-
-Uğursuzluq halında: `ErrorCode` `API_<status>` (və ya `CURL_<n>`), `OperationMessage` xəta mesajı,
-`OperationResult` `"FAILED"`, `Balance` isə `"0.00"` olur. Hesab yalnız USD və TRY balanslarını
-bildirir: istənilən digər valyuta üçün nəticə `ErrorCode: "BALANCE"` və
-`No EUR balance is reported for this account. Available: USD, TRY.` ilə `FAILED` olur.
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### DNS Zonasının İdarə Edilməsi
-
-Gateway qeydləri **dəstlər** şəklində saxlayır (bütün dəyərləri ilə birlikdə bir ad + tip) və hər
-yazma əməliyyatı bütün dəsti əvəz edir. Qeyd adları `@`, `""`, zona apeksi, nisbi etiket (`www`) və ya
-tam ad (`www.example.com`) kimi verilə bilər; onlar gateway-in gözlədiyi nisbi etiketə endirilir.
-Dəstəklənən tiplər: `A`, `AAAA`, `ALIAS`, `CAA`, `CNAME`, `DS`, `MX`, `NAPTR`, `PTR`, `SRV`, `TLSA`,
-`TXT` (digərləri heç bir çağırış edilməzdən əvvəl rədd edilir). TTL 1..86400 aralığına məhdudlaşdırılır
-və nəticə faktiki göndərilmiş böyük hərfli tipi və TTL-i göstərir. `apply = true` (php-dna-nın
-standart dəyəri) ilə dəyişikliklər dərhal tətbiq olunur; bu apply uğursuz olduqda onun xəta zərfi
-qaytarılır (dəyişiklik hazırlıq vəziyyətində qalır). Gateway ardıcıl sorğu partlayışlarına sürət
-limiti tətbiq etdiyi üçün ardıcıl zona çağırışları arasında ən azı bir saniyə fasilə saxlanılır.
-
-```go
-// Siyahı: hər dəyər üçün bir sətir, adlar tam ixtisaslı
-client.GetResourceRecords("example.com")
-
-// Ad+tipi dəqiq bu dəyərlərə təyin edin (boş siyahı dəsti silir). Standart: ttl 3600, apply true
-client.SetResourceRecordSet("example.com", "@", "MX", []string{"10 mx1.example.com", "20 mx2.example.com"}, 3600, true)
-
-// BİR dəyəri əlavə edin / əvəz edin / silin, digərlərini saxlayın (ttl nil = dəstin TTL-ini saxla)
-client.AddResourceRecordValue("example.com", "www", "A", "192.0.2.10", nil, true)
-client.ReplaceResourceRecordValue("example.com", "www", "A", "192.0.2.10", "192.0.2.11", nil, true)
-client.RemoveResourceRecordValue("example.com", "www", "A", "192.0.2.11", true)
-
-// Bütöv ad+tipi silin (knownValue "" = əvvəlcə cari dəyəri axtar)
-client.DeleteResourceRecordSet("example.com", "www", "A", true, "")
-
-// Aşağı səviyyəli çağırışlar (content sətir və ya []string-dir)
-client.AddResourceRecord("example.com", "api", "CNAME", "example.com.", 300, false)
-client.EditResourceRecord("example.com", "api", "api", "CNAME", "www.example.com.", 300, false)
-client.DeleteResourceRecord("example.com", "old.example.com.", "192.0.2.99", "A", false)
-client.ApplyResourceRecords("example.com")
-```
-
-<details>
-<summary>DNS Zonasının İdarə Edilməsi üçün Nümunə Çıxışlar</summary>
-
-```go
-// GetResourceRecords
-map[string]any{"result": "OK", "data": map[string]any{"records": []any{
-	map[string]any{"Name": "example.com.", "Type": "A", "TTL": int64(3600), "Content": "192.0.2.1", "Disabled": false},
-	map[string]any{"Name": "www.example.com.", "Type": "CNAME", "TTL": int64(300), "Content": "example.com.", "Disabled": false},
-}}}
-
-// SetResourceRecordSet, AddResourceRecordValue, ReplaceResourceRecordValue, RemoveResourceRecordValue
-map[string]any{"result": "OK", "data": map[string]any{
-	"Name": "", "Type": "MX", "TTL": int64(3600), "Contents": []any{"10 mx1.example.com", "20 mx2.example.com"},
-}}
-
-// Dəyər artıq mövcuddur / mövcud deyil: heç nə yazılmır
-map[string]any{"result": "OK", "data": map[string]any{"Name": "", "Type": "MX", "Contents": []any{"..."}, "Changed": false}}
-
-// Mövcud olmayan dəst üçün DeleteResourceRecordSet
-map[string]any{"result": "OK", "data": map[string]any{"Name": "nothing", "Type": "A", "Removed": false}}
-
-// AddResourceRecord / EditResourceRecord
-map[string]any{"result": "OK", "data": map[string]any{"Name": "api", "Type": "CNAME", "TTL": int64(300), "Content": "example.com."}}
-
-// DeleteResourceRecord
-map[string]any{"result": "OK", "data": map[string]any{"Name": "old.example.com.", "Type": "A", "Content": "192.0.2.99"}}
-
-// ApplyResourceRecords
-map[string]any{"result": "OK", "data": map[string]any{"DomainName": "example.com"}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### URL Yönləndirməsi
-
-```go
-client.SetForwarding("example.com", "https://www.example.org", "Standard") // və ya "Frame" (maskalanmış)
-client.GetForwarding("example.com")
-client.DeleteForwarding("example.com")
-```
-
-<details>
-<summary>URL Yönləndirməsi üçün Nümunə Çıxışlar</summary>
-
-```go
-// SetForwarding
-map[string]any{"result": "OK", "data": map[string]any{"RedirectAddress": "https://www.example.org", "ForwardType": "Standard"}}
-
-// GetForwarding
-map[string]any{"result": "OK", "data": map[string]any{"Enabled": true, "RedirectAddress": "https://www.example.org", "ForwardType": "Standard"}}
-
-// Yönləndirmə qurulmadıqda GetForwarding
-map[string]any{"result": "OK", "data": map[string]any{"Enabled": false, "RedirectAddress": "", "ForwardType": ""}}
-
-// DeleteForwarding (heç nə qurulmamışdısa Removed false olur)
-map[string]any{"result": "OK", "data": map[string]any{"DomainName": "example.com", "Removed": true}}
-```
-
-</details>
-
-Yalnız gateway-in "Redirect information not found" cavabı "qurulmayıb" deməkdir; istənilən digər
-xəta, məsələn naməlum domen, xəta kimi qaytarılır.
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Köməkçi funksiyalar (şəbəkəsiz)
-
-```go
-client.IsTrTLD("example.com.tr") // true
-
-client.ValidateContact(map[string]any{"FirstName": " Jo ", "Phone": "+90 (532) 374 33 88", "Country": "Turkey"})
-// map[string]any{"FirstName": "Jo", "LastName": "Jo", "AddressLine1": "Addres yok", "City": "ISTANBUL",
-//   "State": "ISTANBUL", "Country": "TR", "ZipCode": "34000", "Phone": "5323743388",
-//   "PhoneCountryCode": "90", "Fax": "", "FaxCountryCode": ""}
-```
-
-`ValidateContact` çatışmayan sahələri yer tutucularla doldurur, adlardan rəqəmləri və durğu işarələrini
-silir, State boş olduqda City-dən istifadə edir, geniş yayılmış ölkə adlarını ISO kodlarına çevirir
-və telefon və faks nömrələrini nömrə və ölkə koduna ayırır. Öz beynəlxalq prefiksi ilə yazılmış
-nömrə (`+44 20 ...`, `0044 20 ...`) başqa ölkə kodu verilsə belə, öz ölkə kodunu saxlayır.
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### Diaqnostika
-
-```go
-client.GetRequestData()        // son çağırışın {"url": ..., "method": ..., "payload": ...} məlumatı
-client.GetResponseData()       // son deşifrə edilmiş cavab və ya {"raw_response": body}
-client.GetResponseHeaders()    // {"url", "http_code", "content_type", "total_time", "headers"}
-client.GetParsedResponseData() // son təhlil edilmiş cavab və ya {Code, Message, Details} xətası
-client.GetLastFunction()       // məsələn, "request:GET domains/info"
-client.GetServiceURL()         // gateway-in əsas URL-i
-client.SetServiceURL("https://ote.domainresellerapi.com/api/v1")
-```
-
-`Client` bu vəziyyəti hər çağırış üçün saxlayır, buna görə bir `Client`-i goroutine-lər arasında
-paylaşmayın; hər goroutine üçün ayrıca bir dənə yaradın.
-
-## Xətaların idarə edilməsi
-
-- Gateway xətaları `Code: "API_<HTTP status>"` qaytarır. Gateway öz xəta kodunu göndərdikdə
-  (məsələn, `Dna.DomainService:Domain:10007`) o, `GatewayCode` kimi əlavə olunur ki, çağıranlar
-  "domen tapılmadı" halını "TLD dəstəklənmir" halından ayıra bilsin. Mesaj gateway-dən gəlir; boş xəta
-  gövdəsi `HTTP 429 - Too Many Requests` (və s.) olur, validasiya xətaları `Details` daxilində
-  sahə-sahə sadalanır (`Admin PostalCode - 'PostalCode' is required`), `Exception of type '...' was thrown`
-  kimi backend şablon mətnləri isə gateway-in təfərrüatları və ya xəta kodunu göstərən sabit mesajla
-  əvəz olunur — heç vaxt xam cavab gövdəsi ilə yox.
-- 301/302 cavabı giriş məlumatlarının rədd edildiyini bildirir: `Message: "Invalid API credentials"`.
-- Nəqliyyat xətaları (vaxt aşımı, DNS, TLS, bağlantının qırılması) heç vaxt boş uğur deyil, xətadır.
-  Vaxt aşımı `Code: "CURL_28"` və `Could not reach the DomainNameAPI service: the connection
-  timed out. (...)` qaytarır; digər xətalar curl üslublu nömrələrdən (`CURL_6` DNS, `CURL_7` bağlantı,
-  `CURL_35` TLS, `CURL_56` bağlantının qırılması, `CURL_60` sertifikat) və `Curl error during request: ...`
-  mətnindən istifadə edir. `API_<n>` HTTP statusları üçün ayrılıb.
-- Qeydiyyat, transfer və yenilənmə sorğularına `"success": false` ilə HTTP 200 cavabları rəddir:
-  gateway-in mesajı ilə `REGISTER_DOMAIN`, `TRANSFER_DOMAIN` və ya `RENEW_DOMAIN`.
-- Boş və ya `null` uğurlu cavab gövdəsi `Code: "RESPONSE"` qaytarır.
-- Vaxt aşımları: hər çağırış üçün 30 saniyə, bağlantı qurmaq üçün 10 saniyə.
-
-## Test rejimi
-
-OTE test gateway-indən (`https://ote.domainresellerapi.com/api/v1`) istifadə etmək üçün üçüncü
-konstruktor arqumenti kimi `true` (və ya `"true"`, `"1"`, `"on"`, `"yes"`) ötürün. Test rejimindəki
-telemetriya `environment: ote` ilə etiketlənir.
-
-## Telemetriya (xəta hesabatları)
-
-API çağırışı uğursuz olduqda kitabxana DomainNameAPI-nin öz xəta izləyicisinə (Sentry) xəta hesabatı
-göndərə bilər. Uğurlu çağırışların kiçik təsadüfi bir hissəsi (4%, üstəlik 1 saniyədən uzun çəkən hər
-çağırış) performans qeydi kimi göndərilir. Hesabat **standart olaraq aktivdir**.
-
-**Nə göndərilir:** xəta kodu və mesajı; endpoint yolu və HTTP metodu; çağırışın müddəti; kitabxananın
-adı (`DomainNameAPI-Go`), kitabxana versiyası və Go versiyası; reseller ID və domen adı; serverin
-ictimai IP ünvanı (`api.ipify.org` vasitəsilə müəyyən edilir); əməliyyat sisteminin istifadəçi adı;
-əlaqə məlumatları daxil olmaqla API sorğusu və cavabı. Yalnız giriş məlumatları maskalanır:
-EPP/avtorizasiya kodları, API açarları, şifrələr və tokenlər `***` olur.
-
-**Heç vaxt nə göndərilmir:** oxuna bilən formada EPP/avtorizasiya kodları, API açarları, şifrələr və
-ya tokenlər; stack trace-lərdə funksiya çağırışlarının arqumentləri.
-
-**Niyə və nə qədər müddətə:** məlumatlar yalnız istifadənin ölçülməsi və problemlərin erkən
-diaqnostikası üçün istifadə olunur və DomainNameAPI-nin öz Sentry serverində 30 gün saxlanılır.
-
-**Söndürmək və ya yalnız minimumu göndərmək:**
-
-```go
-client := dna.New(resellerID, apiKey, false)
-client.SetErrorReportingEnabled(false) // heç nə göndərilmir
-
-client.SetTelemetryMinimal(true) // yalnız xəta kodu/mesajı, endpoint, müddət, versiyalar və reseller ID
-```
-
-Telemetriya arxa planda işləyir, çağırışı heç vaxt uzun müddət bloklamır və kodunuzda heç vaxt panic
-yaratmır.
-
-> 🔒 **Təhlükəsizlik:** TLS sertifikat yoxlaması aktivdir. Köhnəlmiş CA paketi olan hostda onu
-> `client.SetSSLVerification(false)` ilə söndürmək olar — tövsiyə edilmir; CA paketini yeniləmək daha
-> yaxşı həlldir.
-
-## Qabaqcıl seçimlər
-
-```go
-client := dna.New(resellerID, apiKey, false,
-	dna.WithHTTPClient(myHTTPClient),      // istənilən Do(*http.Request) (*http.Response, error)
-	dna.WithSentryDSN("https://key@host/1"),
-	dna.WithTelemetryClient(myHTTPClient),
-)
-```
-
-Xüsusi HTTP klienti istifadə etdikdə vaxt aşımlarını, proxy-ləri və TLS-i həmin klientdə konfiqurasiya
-edin; o, yönləndirmələri izləməməlidir (`CheckRedirect`-dən `http.ErrUseLastResponse` qaytarın).
-
-## Testlər
-
-Hostda Go quraşdırılmalı deyil; Docker kifayətdir:
+## v1-dən keçid
+
+v2 yeni dizayndır: `map[string]any` əvəzinə tipli nəticələr, `{"result": "ERROR"}` zərfləri əvəzinə
+xətalar və php-dna metod dəsti əvəzinə bütün API. Modul yolu `github.com/domainreseller/go-dna/v2` olaraq
+dəyişdi; buna görə siz keçid edənə qədər v1 işləməyə davam edir.
+
+| v1                                                  | v2                                                                     |
+|-----------------------------------------------------|------------------------------------------------------------------------|
+| `dna.New(id, key, true)`                            | `dna.NewClient(id, key, dna.WithEnvironment(dna.OTE))`                 |
+| `res["result"] == "OK"`                             | `err == nil`                                                           |
+| `GetResellerDetails`, `GetCurrentBalance`           | `Account.Get` (+ `Account.Balance("USD")`)                             |
+| `CheckAvailability`                                 | `Domains.Search`, `Domains.BulkSearch`                                 |
+| `GetList`                                           | `Domains.List`, `Domains.All`                                          |
+| `GetTldList`                                        | `Products.TLDs`, `Products.AllTLDs`, `Products.TLD`                    |
+| `GetDetails`, `GetContacts`, `SyncFromRegistry`     | `Domains.Info`                                                         |
+| `RegisterWithContactInfo`                           | `Domains.RegisterWithContacts` (və ya `Contacts.Create` + `Domains.Register`) |
+| `Renew`, `Transfer`, `CheckTransfer`                | `Domains.Renew`, `Domains.Transfer`, `Domains.TransferCheck`           |
+| `ModifyNameServer`                                  | `Domains.SetNameServers`                                               |
+| `EnableTheftProtectionLock` / `Disable...`          | `Domains.Lock` / `Domains.Unlock`                                      |
+| `ModifyPrivacyProtectionStatus`                     | `Domains.SetPrivacy`                                                   |
+| `SaveContacts`                                      | `Domains.UpdateContacts`, `Domains.SetContactHandles`                  |
+| `AddChildNameServer`, `ModifyChildNameServer`, `DeleteChildNameServer` | `Domains.AddHost`, `Domains.UpdateHost`, `Domains.DeleteHost` |
+| `GetResourceRecords`                                | `DNS.List`                                                             |
+| `AddResourceRecord`, `AddResourceRecordValue`       | `DNS.Add`                                                              |
+| `EditResourceRecord`, `SetResourceRecordSet`, `ReplaceResourceRecordValue` | `DNS.Update`                                    |
+| `DeleteResourceRecord`, `RemoveResourceRecordValue`, `DeleteResourceRecordSet` | `DNS.Delete` (hər dəyər üçün bir dəfə)      |
+| `ApplyResourceRecords`                              | `DNS.Apply`                                                            |
+| `GetForwarding`, `SetForwarding`, `DeleteForwarding`| `Domains.Forwarding`, `Domains.SetForwarding`, `Domains.DeleteForwarding` |
+| `CancelTransfer`, `ApproveTransfer`, `RejectTransfer` | dərc edilmiş API-də yoxdur; hesabınızda varsa [öz sorğunuzu](#sorğular-və-baserequest) göndərin |
+| `IsTrTLD`, `ValidateContact`                        | `strings.HasSuffix(name, ".tr")`; doğrulama hər sorğuda işləyir        |
+| `GetRequestData`, `GetResponseData`, ...            | `WithTrace`, `WithLogger`, `client.Do`-dan qayıdan `Response`          |
+| telemetry (`SetErrorReportingEnabled`, Sentry)      | silindi: prosesinizdən kənara heç nə çıxmır; `WithTrace` hadisələrini öz hesabat sisteminizə yönləndirin |
+| `SetSSLVerification(false)`                         | öz TLS tənzimləmələrinizlə `WithHTTPClient`                            |
+
+## Layihənin hazırlanması
 
 ```bash
-docker run --rm -v "$PWD":/src -w /src golang:1.23 go test ./...
-docker run --rm -v "$PWD":/src -w /src golang:1.23 go vet ./...
+go test ./...          # vahid testlər; heç biri şəbəkəyə çıxmır
+go vet ./...
+gofmt -l .
 ```
 
-Test dəsti HTTP təbəqəsi, xətaların uyğunlaşdırılması, telemetriya və köməkçi funksiyalar üçün vahid
-testlərdən, həmçinin `testdata/conformance` qovluğundakı bütün 134 php-dna fixture-unu yenidən
-icra edən uyğunluq testindən ibarətdir (şəbəkə üzərindəki sorğular və qaytarılan dəyərlər php-dna ilə
-tam eyni olmalıdır). Heç bir test şəbəkəyə müraciət etmir.
+`testdata/openapi.json` API-nin OpenAPI sənədidir. Testlər hər sorğu tipini bu sənədə qarşı (metod, yol, query
+adları, gövdə sahələri, məcburi sahələr), hər cavab tipinin JSON adlarını cavab sxemlərinə qarşı və hər enum
+dəyərini yoxlayır; API-yə sorğu tipi olmayan yeni əməliyyat əlavə olunduqda uğursuz olur. Yeniləmək üçün:
 
-## Geri Dönüş və Xəta Kodları ilə Açıqlamaları
+```bash
+curl -fsSL -A "go-dna-spec-update" -o testdata/openapi.json https://api.domainresellerapi.com/swagger/v1/swagger.json
+go test ./...
+```
 
-| Kod  | Açıqlama                                       | Təfərrüat                                                                                                                                                      |
-|------|------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 1000 | Əmr uğurla tamamlandı                          | Əməliyyat uğurlu oldu.                                                                                                                                         |
-| 1001 | Əmr uğurla tamamlandı; hərəkət gözləmədədir    | Əməliyyat uğurlu oldu. Bununla belə, əməliyyat hazırda tamamlanmaq üçün növbəyə alınıb.                                                                        |
-| 2003 | Tələb olunan parametr çatışmır                 | Parametr çatışmazlığı xətası. Məsələn, əlaqə məlumatlarında telefon nömrəsi yoxdur.                                                                            |
-| 2105 | Obyekt yenilənmə üçün uyğun deyil              | Domen statusu yenilənmə üçün uyğun deyil, yeniləmə əməliyyatları üçün kilidlənib. Status "clientupdateprohibited" olmamalıdır. Digər status şərtlərindən qaynaqlana bilər. |
-| 2200 | Kimlik doğrulama xətası                        | İcazə xətası, təhlükəsizlik kodu səhvdir və ya domen başqa qeydiyyatçıda qeydiyyatdadır.                                                                       |
-| 2302 | Obyekt mövcuddur                               | Domen adı və ya nameserver məlumatları verilənlər bazasında artıq mövcuddur. Qeydiyyatdan keçirilə bilməz.                                                     |
-| 2303 | Obyekt mövcud deyil                            | Domen adı və ya nameserver məlumatları verilənlər bazasında mövcud deyil. Yeni qeydiyyat tələb olunur.                                                         |
-| 2304 | Obyekt statusu əməliyyatı qadağan edir         | Domen statusu yeniləmələr üçün uyğun deyil, yeniləmə əməliyyatları üçün kilidlənib. Status "clientupdateprohibited" olmamalıdır. Digər status şərtlərindən qaynaqlana bilər. |
+Bu depozitarinin qaydaları üçün [AGENTS.md](AGENTS.md) faylına baxın.
 
-Kitabxana kodları: `RESPONSE` (boş cavab), `CREDENTIALS` (hesab endpoint-indən yanlış cavab formatı),
-`AVAILABILITY` (domen adı verilməyib), `BALANCE` (valyuta hesab tərəfindən bildirilmir),
-`TRANSFER_NOT_AVAILABLE`, `REGISTER_DOMAIN` / `TRANSFER_DOMAIN` / `RENEW_DOMAIN` (gateway əməliyyatı
-rədd etdi), `DOMAIN_RENEW` (bitmə tarixi olmadan yenilənmə), `ADD_ZONE`, `EDIT_ZONE`, `SET_ZONE`,
-`DELETE_ZONE` (dəstəklənməyən qeyd tipi və ya dəyər tapılmadı), `SET_FORWARD` (dəstəklənməyən
-yönləndirmə tipi və ya boş ünvan), `CURL_<n>` (nəqliyyat xətası), `API_<status>` (HTTP xətası, gateway
-öz kodunu göndərdikdə `GatewayCode` ilə).
+## Dəstək
+
+- API sənədləşməsi: <https://www.domainnameapi.com/docs/>
+- CLI və MCP serveri: <https://github.com/domainreseller/cli>
+- Veb sayt: <https://www.domainnameapi.com>
 
 ## Lisenziya
 
-Apache License 2.0 — bax: [LICENSE](LICENSE).
+Apache License 2.0. [LICENSE](LICENSE) faylına baxın.

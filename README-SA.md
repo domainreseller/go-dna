@@ -1,7 +1,7 @@
 <div align="center">
-  <a href="README-TR.md"   >   TR <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/TR.png" alt="TR" height="20" /></a>
+  <a href="README-TR.md">TR <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/TR.png" alt="TR" height="20" /></a>
   <a href="README.md"> | EN <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/US.png" alt="EN" height="20" /></a>
-   <a href="README-DE.md"> | DE <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/DE.png" alt="DE" height="20" /></a>
+  <a href="README-DE.md"> | DE <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/DE.png" alt="DE" height="20" /></a>
   <a href="README-SA.md"> | SA <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/SA.png" alt="AR" height="20" /></a>
   <a href="README-NL.md"> | NL <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/NL.png" alt="NL" height="20" /></a>
   <a href="README-AZ.md"> | AZ <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/AZ.png" alt="AZ" height="20" /></a>
@@ -9,990 +9,555 @@
   <a href="README-FR.md"> | FR <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/FR.png" alt="FR" height="20" /></a>
   <a href="README-IT.md"> | IT <img style="padding-top: 8px" src="https://raw.githubusercontent.com/yammadev/flag-icons/master/png/IT.png" alt="IT" height="20" /></a>
 </div>
-# go-dna — عميل DomainNameAPI للغة Go
 
-عميل بلغة Go لواجهة REST API الخاصة بمسجّل النطاقات DomainNameAPI. وهو نقل أمين لمكتبة
-[php-dna](https://github.com/domainreseller/php-dna): الدوال نفسها، والطلبات نفسها المُرسَلة عبر
-الشبكة، والقيم المُعادة نفسها. المكتبة القياسية هي الاعتمادية الوحيدة.
+# go-dna: حزمة SDK للغة Go لواجهة Domain Name API
 
-## 📦 التنزيل — استخدم دائمًا صفحة الإصدارات (Releases)!
+[![Go Reference](https://pkg.go.dev/badge/github.com/domainreseller/go-dna/v2.svg)](https://pkg.go.dev/github.com/domainreseller/go-dna/v2)
+[![CI](https://github.com/domainreseller/go-dna/actions/workflows/ci.yml/badge.svg)](https://github.com/domainreseller/go-dna/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-⬇️ **احصل على أحدث نسخة مختبَرة من هنا: https://github.com/domainreseller/go-dna/releases/latest**
+عميل Go مُنمَّط لواجهة REST API الخاصة بالموزّعين في [Domain Name API](https://www.domainnameapi.com): البحث عن
+النطاقات وتسجيلها وتجديدها ونقلها، وDNS، وDNSSEC، وجهات الاتصال، وشهادات SSL، والاستضافة، والطلبات، وكتالوج
+المنتجات، ورصيدك.
 
-> ⚠️ **لا** تستخدم الزر الأخضر **Code → Download ZIP** — فهو ينزّل فرع التطوير الخام. حزم الإصدارات مرقّمة الإصدار ومختبَرة وجاهزة لبيئة الإنتاج.
+- **جميع عمليات API الأربع والستين**، مجمّعة بالطريقة نفسها المتّبعة في [`dna` CLI](https://github.com/domainreseller/cli):
+  الأمر `dna domain info` يقابله `client.Domains.Info`، والأمر `dna dns add` يقابله `client.DNS.Add`.
+- **نتائج وقيم تعداد مُنمَّطة**: `d.Status == dna.DomainStatusPendingDelete` و `d.ExpirationDate.Before(...)`،
+  بلا `map[string]any`.
+- **كل عملية هي نوع طلب** يضمّن `dna.BaseRequest` ويتحقق من صحة نفسه قبل إرسال أي شيء. يمكنك كتابة طلباتك
+  الخاصة بالطريقة نفسها.
+- **آمنة افتراضيًا**: لا تُعاد محاولة الطلبات المُحاسَب عليها بشكل أعمى، و`WithReadOnly` يمنع التغييرات، ويضبط
+  العميل وتيرة طلباته بنفسه تحت حدود المعدّل، ويصلح للاستخدام المتزامن بأمان.
+- **المكتبة القياسية فقط.** يتطلب Go 1.23 أو أحدث.
 
-## المتطلبات
+```go
+client, _ := dna.NewClient(resellerID, apiKey, dna.WithEnvironment(dna.OTE))
 
-- Go 1.21 أو أعلى
-- لا توجد حزم من أطراف ثالثة (فقط `net/http` و `encoding/json` من المكتبة القياسية)
+a, err := client.Domains.Search(ctx, "example.com")
+if err == nil && a.Available() {
+	fmt.Printf("%s is available for %.2f %s\n", a.DomainName, a.Price, a.Currency)
+}
+```
+
+## المحتويات
+
+- [التثبيت](#التثبيت)
+- [بيانات الاعتماد والبيئات](#بيانات-الاعتماد-والبيئات)
+- [الخدمات](#الخدمات)
+- [الاستخدام](#الاستخدام)
+- [الطلبات و BaseRequest](#الطلبات-و-baserequest)
+- [الأخطاء](#الأخطاء)
+- [الأمان والموثوقية](#الأمان-والموثوقية)
+- [خيارات العميل](#خيارات-العميل)
+- [اختبار شيفرتك](#اختبار-شيفرتك)
+- [الانتقال من v1](#الانتقال-من-v1)
+- [التطوير](#التطوير)
 
 ## التثبيت
 
-باستخدام Go modules، ثبّت إصدارًا منشورًا محددًا:
-
 ```bash
-go get github.com/domainreseller/go-dna@v1.0.1
+go get github.com/domainreseller/go-dna/v2
 ```
 
 ```go
-import dna "github.com/domainreseller/go-dna"
+import dna "github.com/domainreseller/go-dna/v2"
 ```
 
-اسم الحزمة هو `dna`. توجد أمثلة قابلة للتشغيل لكل دالة في مجلد [examples](examples):
+تجد برامج قابلة للتشغيل في [examples](examples): `quickstart` و `register` و `expiring` و `dns` و `ssl` و
+`custom-request`.
 
 ```bash
-go run ./examples/GetDetails
+go run ./examples/quickstart example.com
 ```
 
-## 🔑 بيانات اعتماد API — Reseller ID و API Key
+## بيانات الاعتماد والبيئات
 
-تحتاج المكتبة إلى بيانات اعتماد اثنتين بالضبط تُمرَّران إلى الدالة الإنشائية (constructor):
+تحتاج إلى بيانَي اعتماد لـ API من لوحة الموزّع (**API settings**). لا تعمل بيانات الدخول إلى اللوحة.
 
-| المُعامِل | القيمة |
-|---|---|
-| الأول | Reseller ID — بصيغة UUID مثل `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
-| الثاني | API Key |
+| بيان الاعتماد | شكله                                   |
+|---------------|----------------------------------------|
+| Reseller ID   | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
+| API key       | سلسلة سرية طويلة                       |
 
-> 💡 ستجد **Reseller ID** و **API Key** في لوحة DomainNameAPI الخاصة بك ضمن **إعدادات API**.
-> ⚠️ هذه **بيانات اعتماد API** — بيانات تسجيل الدخول إلى اللوحة **لن تعمل** هنا.
+هناك بيئتان. **ابدأ بـ OTE**، وهي بيئة الاختبار: لها بياناتها الخاصة ومفتاح API خاص بها،
+ولا يكلّف أي شيء تفعله فيها مالًا ولا يمسّ النطاقات الحية.
 
 ```go
-resellerID := "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-apiKey := "your-api-key"
-
-// البيئة الحية
-client := dna.New(resellerID, apiKey, false)
-
 // بيئة الاختبار (OTE)
-client = dna.New(resellerID, apiKey, true)
+client, err := dna.NewClient(resellerID, oteAPIKey, dna.WithEnvironment(dna.OTE))
+
+// الإنتاج (الافتراضي): تسجيلات حقيقية ورسوم حقيقية
+client, err := dna.NewClient(resellerID, apiKey)
 ```
 
-تُزال المسافات الزائدة من بداية بيانات الاعتماد ونهايتها. يقبل الوسيط الثالث أيضًا السلاسل النصية التي
-تخزّنها اللوحات لمربعات الاختيار: `"true"` و `"1"` و `"on"` و `"yes"` (بأي حالة أحرف) تختار بيئة
-الاختبار، وكل ما عدا ذلك (`"false"` و `"0"` و `"off"` و `""` ...) يختار البيئة الحية.
+تقرأ `NewClientFromEnv` المتغيرات نفسها التي يقرأها `dna` CLI:
 
-## البدء السريع
+| المتغير           | المعنى                                                        |
+|-------------------|---------------------------------------------------------------|
+| `DNA_RESELLER_ID` | معرّف الموزّع                                                 |
+| `DNA_API_KEY`     | مفتاح API للبيئة المحددة                                      |
+| `DNA_ENV`         | `production` (الافتراضي) أو `ote`                             |
+| `DNA_TEST_MODE`   | القيمة `true` تختار OTE (كما في حزم DomainNameAPI SDK الأخرى) |
+| `DNA_BASE_URL`    | عنوان URL أساسي مخصص، مثل وسيط (proxy)                        |
 
 ```go
-package main
-
-import (
-	"fmt"
-
-	dna "github.com/domainreseller/go-dna"
-)
-
-func main() {
-	client := dna.New("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "your-api-key", false)
-
-	result := client.GetDetails("example.com")
-	if result["result"] != "OK" {
-		e := result["error"].(map[string]any)
-		fmt.Println("Error:", e["Code"], e["Message"], e["Details"])
-		return
-	}
-	data := result["data"].(map[string]any)
-	fmt.Println(data["DomainName"], data["Status"], data["Dates"].(map[string]any)["Expiration"])
-}
+client, err := dna.NewClientFromEnv(dna.WithUserAgent("my-panel/1.4"))
 ```
 
-## القيم المُعادة
+يفشل المفتاح الخاطئ أو البيئة الخاطئة عند أول طلب بخطأ `*APIError` من النوع `KindAuth` مع تلميح؛
+و`client.Account.Get(ctx)` هي أرخص طريقة للتحقق.
 
-تُعيد الدوال البنى الديناميكية نفسها التي تُعيدها php-dna — أي `map[string]any` و `[]any` — وليس
-نماذج ذات أنواع محددة، لذا فإن المفاتيح والأعلام النصية (`"true"`/`"false"`) والمبالغ المالية المنسّقة
-كسلاسل نصية (`"11.9900"`) مطابقة تمامًا لما في php-dna. الأرقام القادمة من البوابة تكون من النوع
-`int64` أو `float64`.
+## الخدمات
 
-تبدو الاستدعاءات الناجحة على هذا النحو:
+| الخدمة            | مجموعة CLI    | العمليات                                                                                                                                                          |
+|-------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `client.Account`  | `dna account` | `Get`, `Transactions`, `AllTransactions`                                                                                                                          |
+| `client.Contacts` | `dna contact` | `Get`, `Create`, `Update`, `Verification`, `ResendVerification`                                                                                                   |
+| `client.Domains`  | `dna domain`  | `Search`, `BulkSearch`, `List`, `All`, `Info`, `Register`, `RegisterWithContacts`, `Renew`, `RenewCheck`, `Restore`, `Transfer`, `TransferCheck`, `TransferStatus`, `Lock`, `Unlock`, `SetPrivacy`, `UpdateAuthCode`, `SetNameServers`, `AddHost`, `UpdateHost`, `DeleteHost`, `UpdateContacts`, `SetContactHandles`, `Documents`, `UploadDocuments`, `Forwarding`, `SetForwarding`, `DeleteForwarding` |
+| `client.DNS`      | `dna dns`     | `List`, `Add`, `Update`, `Delete`, `Apply`                                                                                                                        |
+| `client.DNSSEC`   | `dna dnssec`  | `Get`, `Add`, `Remove`, `Disable`                                                                                                                                 |
+| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Approvers`, `Revoke`                                                |
+| `client.Hosting`  | `dna hosting` | `Packages`, `Plans`, `Create`, `Wait`, `Get`, `GetByToken`, `Status`                                                                                              |
+| `client.Orders`   | `dna order`   | `Get`                                                                                                                                                             |
+| `client.Products` | `dna product` | `List`, `Info`, `TLDs`, `AllTLDs`, `TLD`, `SSLs`                                                                                                                  |
 
-```go
-map[string]any{"result": "OK", "data": map[string]any{ /* ... */ }}
-```
-
-الاستدعاءات الفاشلة لا تُسبب panic أبدًا؛ بل تُعيد غلاف الخطأ:
-
-```go
-map[string]any{
-	"result": "ERROR",
-	"error": map[string]any{
-		"Code":        "API_404", // API_<حالة HTTP>، أو CURL_<n>، أو رمز من المكتبة مثل RESPONSE
-		"Message":     "The domain name you requested could not be found. Please check and try again.",
-		"Details":     "The domain could not be found. Please check and try again.",
-		"GatewayCode": "Dna.DomainService:Domain:10007", // فقط مع API_<status>، عندما ترسل البوابة رمزها الخاص
-	},
-}
-```
-
-تستخدم ثلاث دوال شكلًا مختلفًا، تمامًا كما في php-dna:
-
-| الدالة | النجاح | الفشل |
-|---|---|---|
-| `CheckAvailability` | قائمة `[]any` مجرّدة | غلاف الخطأ (`map[string]any`)، لذا فإن نوع القيمة المُعادة هو `any` |
-| `GetCurrentBalance` | غلاف يحتوي `OperationResult: "SUCCESS"` | الغلاف نفسه مع `OperationResult: "FAILED"` |
-| `GetResellerDetails` | خريطة مسطّحة (`id` و `name` و `balance` و `balances` ...) | غلاف الخطأ |
-
-### الوسائط الاختيارية
-
-لا تدعم Go الوسائط الافتراضية. تحافظ الدوال على ترتيب المعاملات في php-dna وتأخذ كل وسيط بشكل
-صريح؛ وتُعرض القيمة الافتراضية في php-dna في كل قسم أدناه. ولتسهيل الاستخدام، تختار بعض القيم الصفرية
-القيمة الافتراضية: `GetCurrentBalance("")` تعني USD، و `GetTldList(0)` تعني 20،
-و `CheckAvailability(..., "")` تعني `create`، و `SetForwarding(..., "")` تعني `Standard`.
-تأخذ `RegisterWithContactInfo` وسائطها الاختيارية الأربعة ضمن `*RegisterOptions` (القيمة nil = القيم الافتراضية).
-تأخذ `AddResourceRecordValue` و `ReplaceResourceRecordValue` المعامل `ttl *int`: القيمة `nil` تُبقي
-على TTL الحالي للمجموعة.
-
-### جهات الاتصال
-
-جهات الاتصال هي `map[string]any` بمفاتيح php-dna (`FirstName` و `LastName` و `Company` و `EMail`
-و `AddressLine1` و `AddressLine2` و `City` و `State` و `Country` و `ZipCode` و `Phone`
-و `PhoneCountryCode` و `Fax` و `FaxCountryCode`). كما يُقبل الشكل المتداخل (`Address.Line1`
-و `Phone.Phone.Number` ...). ولأن خرائط Go ليس لها ترتيب، تُمرَّر الأدوار الأربعة كقائمة مرتّبة
-من النوع `dna.Contacts`:
-
-```go
-contacts := dna.Contacts{
-	{Role: "Administrative", Contact: contact},
-	{Role: "Billing", Contact: contact},
-	{Role: "Technical", Contact: contact},
-	{Role: "Registrant", Contact: contact},
-}
-contacts = dna.AllRoles(contact)                 // جهة الاتصال نفسها للأدوار الأربعة
-contacts = dna.ContactsFromMap(map[string]map[string]any{ /* role => contact */ })
-```
-
-تُستكمل جهات الاتصال الناقصة وفق قواعد `ValidateContact` قبل إرسالها. تُستخدم جهات الاتصال في
-`RegisterWithContactInfo` و `SaveContacts`؛ أما عمليات النقل فلا ترسل جهات اتصال أبدًا.
-
-### أسماء الدوال
-
-تتبع أسماء الدوال في Go أعراف لغة Go؛ واسم الدالة في php-dna هو نفسه بصيغة lowerCamelCase.
-`getServiceUrl`/`setServiceUrl` أصبحتا `GetServiceURL`/`SetServiceURL`، و `setSslVerification` أصبحت
-`SetSSLVerification`.
+تستقبل الدوال المدخلات المطلوبة كوسائط (`Info(ctx, "example.com")`) أو، حين تكون للعملية مدخلات اختيارية،
+بنية طلب (`Register(ctx, dna.DomainRegisterRequest{...})`). المرجع الكامل مع كل الحقول
+على [pkg.go.dev](https://pkg.go.dev/github.com/domainreseller/go-dna/v2).
 
 ## الاستخدام
 
-### تسجيل النطاق
+تفترض جميع المقتطفات وجود `ctx := context.Background()` و`client`.
 
-القيم الافتراضية في php-dna: خوادم الأسماء الافتراضية (`ns1.domainnameapi.com` و `ns2.domainnameapi.com`)،
-قفل EPP مفعّل، الخصوصية معطّلة، ولا توجد سمات إضافية. السمات الإضافية مطلوبة فقط لنطاقات
-مثل `.tr`.
+### البحث
 
 ```go
-contact := map[string]any{
-	"FirstName":        "John",
-	"LastName":         "Doe",
-	"Company":          "Example Corp",
-	"EMail":            "john.doe@example.com",
-	"AddressLine1":     "123 Lorem Street",
-	"AddressLine2":     "Suite 456",
-	"City":             "Springfield",
-	"Country":          "US",
-	"Fax":              "1234567890",
-	"FaxCountryCode":   "1",
-	"Phone":            "9876543210",
-	"PhoneCountryCode": 1,
-	"ZipCode":          "12345",
-	"State":            "IL",
-}
+a, err := client.Domains.Search(ctx, "example.com")
+// a.Available(), a.Price, a.Currency, a.IsPremium, a.IsDocumentRequired, a.Reason
 
-opts := dna.DefaultRegisterOptions()
-opts.NameServers = []string{"ns1.example.com", "ns2.example.com"}
-opts.EppLock = true
-opts.PrivacyLock = false
-// لنطاقات .tr فقط:
-opts.AdditionalAttributes = map[string]any{
-	"TRABISDOMAINCATEGORY": 1,             // 1 = فرد (Owner)، 0 = شركة (Corporate)
-	"TRABISCITIZIENID":     "12345678901", // أو TRABISTAXOFFICE + TRABISTAXNUMBER للشركات
-}
-
-result := client.RegisterWithContactInfo("example.com", 1, dna.AllRoles(contact), opts)
-```
-
-بالنسبة لنطاقات `.tr`، تُوحَّد أسماء TRABIS القديمة وفق مخطط البوابة: تصبح الفئة
-`Owner`/`Corporate`، ويصبح `TRABISCITIZIENID` هو `TRABISCITIZENID`، وتُحذف حقول الدولة والمدينة
-والاسم والمؤسسة (إذ تأخذها البوابة من جهة الاتصال). تُرسَل قيمة كل سمة كسلسلة نصية.
-
-<details>
-<summary>مثال على مخرجات تسجيل النطاق</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"ID":                      int64(0),
-		"Status":                  "Active",
-		"DomainName":              "",
-		"AuthCode":                "",
-		"LockStatus":              "false",
-		"PrivacyProtectionStatus": "false",
-		"IsChildNameServer":       "false",
-		"Contacts": map[string]any{
-			"Billing":        map[string]any{"ID": int64(0)},
-			"Technical":      map[string]any{"ID": int64(0)},
-			"Administrative": map[string]any{"ID": int64(0)},
-			"Registrant":     map[string]any{"ID": int64(0)},
-		},
-		"Dates": map[string]any{
-			"Start":         "",
-			"Expiration":    "2027-11-09T12:00:00",
-			"RemainingDays": int64(365),
-		},
-		"NameServers":      []any{},
-		"Additional":       []any{},
-		"ChildNameServers": []any{},
-	},
+results, err := client.Domains.BulkSearch(ctx, "example.com", "example.net", "example.org")
+for _, r := range results {
+	fmt.Println(r.DomainName, r.Status, r.Price)
 }
 ```
 
-تُجيب نقطة نهاية التسجيل بسجل مختصر، لذا تكون معظم الحقول فارغة؛ استدعِ `GetDetails`
-بعد ذلك للحصول على بيانات النطاق كاملة. عندما ترفض البوابة التسجيل (HTTP 200 مع
-`"success": false`) تكون النتيجة خطأً بالرمز `REGISTER_DOMAIN` مع رسالة البوابة.
+تقسّم `BulkSearch` القوائم التي تزيد على 30 نطاقًا إلى عدة طلبات. تُعرض الأسعار بعملة الحساب، أو
+بالعملة التي تُحدَّد بـ `dna.WithCurrency("TRY")`.
 
-</details>
+### التسجيل
 
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### تجديد النطاق
+باستخدام معرّفات جهات الاتصال (أنشئ واحدًا بـ `Contacts.Create`):
 
 ```go
-result := client.Renew("example.com", 1)
-```
+handle, err := client.Contacts.Create(ctx, dna.Contact{
+	FirstName: "Ada", LastName: "Lovelace", Email: "ada@example.com",
+	Address: "1 Example Street", City: "Istanbul", State: "Istanbul", PostalCode: "34000",
+	Country: "TR", PhoneCountryCode: "90", Phone: "5551234567",
+})
 
-<details>
-<summary>مثال على مخرجات تجديد النطاق</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"ExpirationDate": "2026-03-15T10:00:00"}}
-```
-
-رفض البوابة (`"success": false`) يُعيد الرمز `RENEW_DOMAIN`؛ والنجاح دون تاريخ انتهاء
-يُعيد `DOMAIN_RENEW`.
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### نقل النطاق
-
-```go
-result := client.Transfer("example.com", "Xy9#mK2$", 1)
-```
-
-لا ترسل عمليات النقل جهات اتصال أبدًا: إذ يتسلّمها المسجّل مع النطاق، لذا يحمل الطلب دائمًا قائمة
-جهات اتصال فارغة ولا تملك الدالة معامل جهات اتصال. للنتيجة الشكل نفسه الذي تُعيده `GetDetails`؛
-ورفض البوابة (`"success": false`) يُعيد الرمز `TRANSFER_DOMAIN` مع رسالة البوابة.
-
-<details>
-<summary>مثال على مخرجات نقل النطاق</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"ID": int64(0), "Status": "Active", "DomainName": "", "AuthCode": "",
-		"LockStatus": "false", "PrivacyProtectionStatus": "false", "IsChildNameServer": "false",
-		"Contacts": map[string]any{ /* Billing, Technical, Administrative, Registrant: {"ID": 0} */ },
-		"Dates": map[string]any{"Start": "", "Expiration": "2027-11-09T12:00:00", "RemainingDays": int64(365)},
-		"NameServers": []any{}, "Additional": []any{}, "ChildNameServers": []any{},
-	},
-}
-```
-
-</details>
-
-استدعاءات النقل ذات الصلة:
-
-```go
-client.CancelTransfer("example.com")  // {"result": "OK", "data": {"DomainName": "example.com", "Status": "Cancelled"}}
-client.ApproveTransfer("example.com") // {"result": "OK", "data": {"DomainName": "example.com", "Status": "Approved"}}
-client.RejectTransfer("example.com")  // {"result": "OK", "data": {"DomainName": "example.com", "Status": "Rejected"}}
-```
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### التحقق من إمكانية النقل
-
-```go
-result := client.CheckTransfer("example.com", "Ab1!xyZ9")
-```
-
-تكون قيمة `result` هي `OK` فقط عندما يُفيد السجل (registry) بأن النطاق قابل للنقل؛ وإلا فهي `ERROR`
-مع الرمز `TRANSFER_NOT_AVAILABLE` ومع قيمة `data` نفسها.
-
-<details>
-<summary>مثال على مخرجات التحقق من إمكانية النقل</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"TransferAvailabilityStatus": true,
-		"AuthCodeIsRequired":         true,
-		"AuthCodeIsValid":            true,
-		"UserTransferRequired":       false,
-		"TransferLock":               false,
-		"Message":                    "Domain can be transferred",
-		"MessageKey":                 "TransferAvailable",
-		"Additional":                 []any{},
-	},
-}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### قائمة النطاقات
-
-```go
-result := client.GetList(map[string]any{
-	"OrderColumn":    "Id",
-	"OrderDirection": "ASC",
-	"PageNumber":     0,
-	"PageSize":       1000,
+res, err := client.Domains.Register(ctx, dna.DomainRegisterRequest{
+	DomainName:  "example.com",
+	Years:       1,
+	NameServers: []string{"ns1.example.net", "ns2.example.net"},
+	Handles:     dna.SameHandle(handle), // أو dna.ContactHandles{Registrant: "DNA-1", Admin: "DNA-2", ...}
 })
 ```
 
-تُترجَم `PageNumber` (تبدأ من 0) و `PageSize` و `OrderColumn` و `OrderDirection` إلى
-`SkipCount` و `MaxResultCount` و `Sorting` الخاصة بالبوابة؛ أما المفاتيح الأخرى (مثل `DomainName`) فتُمرَّر
-كما هي كمرشّحات. القيمة `nil` تُعيد أول 200 نطاق.
-
-<details>
-<summary>مثال على مخرجات قائمة النطاقات</summary>
+باستخدام جهات اتصال مضمَّنة:
 
 ```go
-map[string]any{
-	"result":     "OK",
-	"TotalCount": int64(1),
-	"data": map[string]any{
-		"Domains": []any{
-			map[string]any{
-				"ID":                      int64(564346),
-				"Status":                  "Active",
-				"DomainName":              "example.com",
-				"AuthCode":                "",
-				"LockStatus":              "true",
-				"PrivacyProtectionStatus": "false",
-				"IsChildNameServer":       "false",
-				"Contacts": map[string]any{
-					"Billing":        map[string]any{"ID": ""},
-					"Technical":      map[string]any{"ID": ""},
-					"Administrative": map[string]any{"ID": ""},
-					"Registrant":     map[string]any{"ID": ""},
-				},
-				"Dates": map[string]any{
-					"Start":         "2024-03-15T10:20:30",
-					"Expiration":    "2027-03-15T10:20:30",
-					"RemainingDays": int64(126),
-				},
-				"NameServers":      []any{"ns1.example.com", "ns2.example.com"},
-				"Additional":       []any{},
-				"ChildNameServers": []any{},
-			},
-		},
-	},
+res, err := client.Domains.RegisterWithContacts(ctx, dna.DomainRegisterWithContactsRequest{
+	DomainName:  "example.com",
+	NameServers: []string{"ns1.example.net", "ns2.example.net"},
+	Contacts:    dna.SameContact(owner), // أو dna.DomainContacts{Registrant: &owner, Admin: &admin, ...}
+})
+```
+
+تُنظَّف جهات الاتصال قبل الإرسال: تُقصّ المسافات الزائدة من الحقول، ويُحوَّل رمز الدولة إلى أحرف كبيرة، وتُبقي
+حقول الهاتف أرقامها فقط (يصلح `"+90 (555) 123-45-67"`). تحتاج بعض النطاقات العليا (TLD) إلى سمات خاصة بالسجل:
+اعثر عليها عبر `client.Products.TLD(ctx, "com.tr")` ودالتها `RequiredAttributes()`، ومرّرها في `TLDAttributes`.
+
+إذا ردّت API لكنها رفضت الطلب (`"success": false`)، فإن الخطأ هو `*dna.OperationError` ومعه
+رسالة API.
+
+### التجديد والنقل والاستعادة
+
+```go
+check, err := client.Domains.RenewCheck(ctx, "example.com", 1) // check.Renewable, check.PremiumPrice
+res, err := client.Domains.Renew(ctx, "example.com", 1)
+
+tc, err := client.Domains.TransferCheck(ctx, "example.com", "auth-code") // tc.Transferable, tc.AuthCodeValid
+res, err := client.Domains.Transfer(ctx, dna.DomainTransferRequest{DomainName: "example.com", AuthCode: "auth-code"})
+st, err := client.Domains.TransferStatus(ctx, "example.com")
+
+err = client.Domains.Restore(ctx, "example.com") // خلال فترة الاسترداد (redemption)
+```
+
+### تفاصيل النطاق وقائمة النطاقات
+
+```go
+d, err := client.Domains.Info(ctx, "example.com")
+fmt.Println(d.Status, d.ExpirationDate, d.RemainingDays, d.Locked, d.NameServers, d.AuthCode)
+if owner, ok := d.Contact(dna.ContactTypeRegistrant); ok {
+	fmt.Println(owner.Email)
+}
+
+// صفحة واحدة
+page, err := client.Domains.List(ctx, dna.DomainListRequest{ListOptions: dna.ListOptions{Limit: 50}})
+
+// كل النطاقات؛ تُجلب الصفحات نيابةً عنك
+for d, err := range client.Domains.All(ctx, dna.DomainListRequest{
+	Statuses: []dna.DomainStatus{dna.DomainStatusActive},
+}) {
+	if err != nil {
+		return err
+	}
+	fmt.Println(d.DomainName, d.ExpirationDate)
 }
 ```
 
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### قائمة امتدادات النطاقات (TLD)
+### القفل والخصوصية وخوادم الأسماء وخوادم الأسماء الفرعية
 
 ```go
-result := client.GetTldList(100) // القيمة الافتراضية في php-dna: 20
+err = client.Domains.Lock(ctx, "example.com")
+err = client.Domains.Unlock(ctx, "example.com")
+err = client.Domains.SetPrivacy(ctx, "example.com", true)
+code, err := client.Domains.UpdateAuthCode(ctx, "example.com")
+
+err = client.Domains.SetNameServers(ctx, dna.DomainNameServersSetRequest{
+	DomainName:  "example.com",
+	NameServers: []string{"ns1.example.net", "ns2.example.net"},
+	// DNSSECMode: dna.DNSSECModeDisable, // فقط للنطاقات الموقّعة بـ DNSSEC
+})
+
+err = client.Domains.AddHost(ctx, "example.com", "ns1.example.com", "192.0.2.10", "2001:db8::10") // يُكتشف إصدار IP تلقائيًا
+err = client.Domains.DeleteHost(ctx, "example.com", "ns1.example.com")
 ```
 
-<details>
-<summary>مثال على مخرجات قائمة امتدادات النطاقات</summary>
+### جهات اتصال النطاق
 
 ```go
-map[string]any{
-	"result": "OK",
-	"data": []any{
-		map[string]any{
-			"id": int64(1), "status": "Active", "tld": "com",
-			"maxchar": int64(63), "maxperiod": int64(10), "minchar": int64(1), "minperiod": int64(1),
-			"pricing": map[string]any{
-				"registration": map[string]any{"1": "10.8100", "2": "21.6200"},
-				"renew":        map[string]any{"1": "11.0100"},
-				"transfer":     map[string]any{"1": "10.6100"},
-				"restore":      map[string]any{"1": "99.9000"},
-			},
-			"currencies": map[string]any{
-				"registration": "USD", "renew": "USD", "transfer": "USD", "restore": "USD",
-			},
-		},
-	},
+err = client.Domains.SetContactHandles(ctx, "example.com", dna.ContactHandles{Admin: "DNA-2", Tech: "DNA-2"})
+err = client.Domains.UpdateContacts(ctx, "example.com", dna.DomainContacts{Billing: &billing})
+
+details, err := client.Contacts.Get(ctx, "DNA-1")           // جهة الاتصال وحالة التحقق منها
+result, err := client.Contacts.Update(ctx, "DNA-1", contact) // يحدّث كل نطاق يستخدم المعرّف
+```
+
+### منطقة DNS
+
+```go
+err = client.DNS.Add(ctx, dna.DNSAddRequest{
+	DomainName: "example.com", Name: "www", Type: dna.RecordTypeA, TTL: 600, Values: []string{"192.0.2.10"},
+})
+err = client.DNS.Update(ctx, dna.DNSUpdateRequest{ // يستبدل كل قيم المجموعة
+	DomainName: "example.com", RecordName: "www", Type: dna.RecordTypeA, Values: []string{"192.0.2.20"},
+})
+err = client.DNS.Delete(ctx, dna.DNSDeleteRequest{
+	DomainName: "example.com", Name: "www", Type: dna.RecordTypeA, Value: "192.0.2.20",
+})
+
+sets, err := client.DNS.List(ctx, "example.com")
+for _, s := range sets {
+	fmt.Println(s.Name, s.Type, s.TTL, s.Values())
 }
+
+res, err := client.DNS.Apply(ctx, "example.com") // تحويل النطاق إلى خوادم أسماء المنصة
 ```
 
-</details>
+يمكن أن تكون الأسماء نسبية (`www`) أو الجذر (`""` أو `"@"`) أو مؤهَّلة بالكامل. أنواع السجلات هنا غير حساسة
+لحالة الأحرف (يُرسَل `"txt"` على أنه `TXT`). يلتقط التحقق ما سترفضه API: سجل CNAME عند الجذر، وقيمة CAA
+من دون ثلاثة أجزاء، وقيمة MX من دون أولوية. تردّ بيئة الاختبار على كل استدعاء للمنطقة بحالة HTTP
+500، لذا لا يمكن تجربة شيفرة المناطق إلا في الإنتاج.
 
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### التحقق من توفر النطاق
+### DNSSEC
 
 ```go
-result := client.CheckAvailability([]string{"hello", "world123x0"}, []string{"com", "net"}, 1, "create")
-if list, ok := result.([]any); ok {
-	// نجاح
-	_ = list
-}
+ds, err := dna.ParseDS("2371 13 2 1F987CC6583E92DF0890718C42...") // كما يعرضه مزوّد DNS لديك
+results, err := client.DNSSEC.Add(ctx, "example.com", ds)
+info, err := client.DNSSEC.Get(ctx, "example.com") // info.Status, info.DSRecords
+res, err := client.DNSSEC.Disable(ctx, "example.com")
 ```
-
-<details>
-<summary>مثال على مخرجات التحقق من توفر النطاق</summary>
-
-```go
-[]any{
-	map[string]any{
-		"TLD": "com", "DomainName": "hello", "Status": "notavailable", "Command": "create",
-		"Period": int64(1), "IsFee": false, "Price": "10.8100", "Currency": "USD", "Reason": "Domain exists",
-	},
-	map[string]any{
-		"TLD": "com", "DomainName": "world123x0", "Status": "available", "Command": "create",
-		"Period": int64(1), "IsFee": false, "Price": "10.8100", "Currency": "USD", "Reason": nil,
-	},
-}
-```
-
-تكون قيمة `IsFee` هي `true` للنطاقات المميزة (premium).
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### تفاصيل النطاق
-
-```go
-result := client.GetDetails("example.com")
-result = client.SyncFromRegistry("example.com") // الشكل نفسه
-```
-
-<details>
-<summary>مثال على مخرجات تفاصيل النطاق</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"ID":                      int64(564346),
-		"Status":                  "Active",
-		"DomainName":              "example.com",
-		"AuthCode":                "DHQ!K52",
-		"LockStatus":              "true",
-		"PrivacyProtectionStatus": "false",
-		"IsChildNameServer":       "true",
-		"Contacts": map[string]any{
-			"Billing":        map[string]any{"ID": "DNA-B-4"},
-			"Technical":      map[string]any{"ID": "DNA-T-3"},
-			"Administrative": map[string]any{"ID": "DNA-A-2"},
-			"Registrant":     map[string]any{"ID": "DNA-R-1"},
-		},
-		"Dates": map[string]any{
-			"Start":         "2024-03-15T10:20:30",
-			"Expiration":    "2027-03-15T10:20:30",
-			"RemainingDays": int64(126),
-		},
-		"NameServers":      []any{"ns1.example.com", "ns2.example.com"},
-		"Additional":       map[string]any{"TRABISDOMAINCATEGORY": "1"},
-		"ChildNameServers": []any{map[string]any{"ns": "ns1.example.com", "ip": "1.2.3.4"}},
-	},
-}
-```
-
-تكون قيمة `Status` هي التسمية النصية (`Active` و `TransferredOut` و `PendingDelete` ...) حتى عندما
-ترسل البوابة القيمة الرقمية للتعداد (enum). التواريخ غير القابلة للتحليل تصبح `""`، ولا تصبح أبدًا تاريخًا زائفًا من عام 1970.
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### تعديل خوادم الأسماء
-
-```go
-result := client.ModifyNameServer("example.com", []string{"ns1.example.com", "ns2.example.com"})
-```
-
-تُقبل الخريطة (map) أيضًا (تُستخدم قيمها بترتيب المفاتيح). قبل الإرسال، تُزال المسافات الزائدة من
-المُدخلات وتُحوَّل إلى أحرف صغيرة وتُحذف النقطة الأخيرة منها وتُزال القيم المكرّرة؛ وتُظهر النتيجة
-هذه القائمة الموحَّدة.
-
-<details>
-<summary>مثال على مخرجات تعديل خوادم الأسماء</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServers": []any{"ns1.example.com", "ns2.example.com"}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### تفعيل قفل النطاق
-
-```go
-result := client.EnableTheftProtectionLock("example.com")
-```
-
-<details>
-<summary>مثال على مخرجات تفعيل قفل النطاق</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"LockStatus": true}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### إلغاء قفل النطاق
-
-```go
-result := client.DisableTheftProtectionLock("example.com")
-```
-
-<details>
-<summary>مثال على مخرجات إلغاء قفل النطاق</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"LockStatus": false}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### إضافة خادم أسماء فرعي
-
-```go
-result := client.AddChildNameServer("example.com", "ns1.example.com", "1.2.3.4")
-```
-
-<details>
-<summary>مثال على مخرجات إضافة خادم أسماء فرعي</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServer": "ns1.example.com", "IPAdresses": []any{"1.2.3.4"}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### حذف خادم أسماء فرعي
-
-```go
-result := client.DeleteChildNameServer("example.com", "ns1.example.com")
-```
-
-<details>
-<summary>مثال على مخرجات حذف خادم أسماء فرعي</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServer": "ns1.example.com"}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### تحديث خادم الأسماء الفرعي
-
-```go
-result := client.ModifyChildNameServer("example.com", "ns1.example.com", "1.2.3.5")
-```
-
-<details>
-<summary>مثال على مخرجات تحديث خادم الأسماء الفرعي</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"NameServer": "ns1.example.com", "IPAdresses": []any{"1.2.3.5"}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### تعديل حالة حماية الخصوصية
-
-```go
-result := client.ModifyPrivacyProtectionStatus("example.com", true, "Owner request")
-```
-
-قيمة `status` إمّا bool أو قيمة تخزّنها اللوحات: `true` و `1` و `"1"` و `"true"` و `"on"` و `"yes"` تُفعّل
-الخصوصية، وأي قيمة أخرى (`"off"` و `"0"` و `false` ...) تُعطّلها. يُحتفظ بالسبب لأغراض التوافق مع
-php-dna فقط ولا يُرسَل: إذ لا يوجد مثل هذا الحقل في البوابة.
-
-<details>
-<summary>مثال على مخرجات تعديل حالة حماية الخصوصية</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"PrivacyProtectionStatus": true}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### الحصول على معلومات الاتصال للنطاق
-
-```go
-result := client.GetContacts("example.com")
-```
-
-تُطابَق أنواع جهات الاتصال القادمة من البوابة دون تمييز لحالة الأحرف (`Admin`/`Administrative` و `Tech`/`Technical`
-و `Registrant`/`Owner` و `Billing`)؛ وأي نوع آخر يُحتفظ به تحت اسمه الخاص بحرف أول كبير.
-
-<details>
-<summary>مثال على مخرجات الحصول على معلومات الاتصال</summary>
-
-```go
-map[string]any{
-	"result": "OK",
-	"data": map[string]any{
-		"contacts": map[string]any{
-			"Administrative": map[string]any{
-				"ID": "DNA-A-2", "Status": "Active", "AuthCode": "",
-				"FirstName": "Grace", "LastName": "Hopper", "Company": "", "EMail": "grace@example.com",
-				"Type": "Administrative",
-				"Address": map[string]any{
-					"Line1": "Example Street 2", "Line2": "", "Line3": "",
-					"State": "DC", "City": "Washington", "Country": "US", "ZipCode": "20001",
-				},
-				"Phone": map[string]any{
-					"Phone": map[string]any{"Number": "2025550100", "CountryCode": "1"},
-					"Fax":   map[string]any{"Number": "2025550101", "CountryCode": "1"},
-				},
-				"Additional": []any{},
-			},
-			// "Billing" و "Registrant" و "Technical": الشكل نفسه
-		},
-	},
-}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### حفظ معلومات الاتصال للنطاق
-
-```go
-result := client.SaveContacts("example.com", dna.AllRoles(contact))
-```
-
-<details>
-<summary>مثال على مخرجات حفظ معلومات الاتصال</summary>
-
-```go
-map[string]any{"result": "OK", "data": map[string]any{"contacts": map[string]any{}}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### الحصول على معلومات الموزع
-
-```go
-result := client.GetResellerDetails()
-```
-
-<details>
-<summary>مثال على مخرجات معلومات الموزع</summary>
-
-```go
-map[string]any{
-	"result":   "OK",
-	"id":       "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-	"active":   true,
-	"name":     "Example Reseller",
-	"balance":  "601.64",
-	"currency": "USD",
-	"symbol":   "$",
-	"balances": []any{
-		map[string]any{"balance": "601.64", "currency": "USD", "symbol": "$"},
-		map[string]any{"balance": "1250.50", "currency": "TL", "symbol": "TL"},
-	},
-}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### الحصول على الرصيد الحالي
-
-```go
-result := client.GetCurrentBalance("USD") // USD (افتراضي)، TRY أو EUR أو GBP
-```
-
-<details>
-<summary>مثال على مخرجات الرصيد الحالي</summary>
-
-```go
-map[string]any{
-	"ErrorCode":        int64(0),
-	"OperationMessage": "Command completed succesfully.",
-	"OperationResult":  "SUCCESS",
-	"Balance":          "601.64",
-	"CurrencyId":       int64(2),
-	"CurrencyInfo":     nil,
-	"CurrencyName":     "USD",
-	"CurrencySymbol":   "$",
-}
-```
-
-عند الفشل: تكون `ErrorCode` هي `API_<status>` (أو `CURL_<n>`)، و `OperationMessage` هي رسالة الخطأ،
-و `OperationResult` هي `"FAILED"`، و `Balance` هي `"0.00"`. لا يُبلغ الحساب إلا عن أرصدة USD و TRY:
-لأي عملة أخرى تكون النتيجة `FAILED` مع `ErrorCode: "BALANCE"` والرسالة
-`No EUR balance is reported for this account. Available: USD, TRY.`
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### إدارة منطقة DNS
-
-تخزّن البوابة السجلات على شكل **مجموعات** (اسم + نوع واحد مع جميع قيمه)، وكل عملية كتابة
-تستبدل المجموعة كاملة. يمكن إعطاء أسماء السجلات بالصيغة `@` أو `""` أو جذر المنطقة (apex) أو تسمية نسبية
-(`www`) أو اسم كامل (`www.example.com`)؛ وتُختزل جميعها إلى التسمية النسبية التي تتوقعها البوابة.
-الأنواع المدعومة: `A` و `AAAA` و `ALIAS` و `CAA` و `CNAME` و `DS` و `MX` و `NAPTR` و `PTR` و `SRV`
-و `TLSA` و `TXT` (تُرفض الأنواع الأخرى قبل إجراء أي استدعاء). تُحصر قيمة TTL ضمن النطاق 1..86400، وتُظهر النتيجة
-النوع بأحرف كبيرة وقيمة TTL اللذين أُرسلا فعليًا. مع `apply = true` (القيمة الافتراضية في php-dna)
-تُعتمد التغييرات فورًا؛ وإذا فشل هذا الاعتماد يُعاد غلاف الخطأ الخاص به (ويبقى التغيير في وضع الانتظار).
-ويُفصل بين استدعاءات المنطقة المتتالية بثانية واحدة على الأقل لأن البوابة تحدّ من معدل الطلبات المتلاحقة.
-
-```go
-// القائمة: صف واحد لكل قيمة، والأسماء مؤهّلة بالكامل
-client.GetResourceRecords("example.com")
-
-// تعيين اسم+نوع إلى هذه القيم بالضبط (القائمة الفارغة تحذف المجموعة). الافتراضي: ttl 3600، apply true
-client.SetResourceRecordSet("example.com", "@", "MX", []string{"10 mx1.example.com", "20 mx2.example.com"}, 3600, true)
-
-// إضافة / استبدال / حذف قيمة واحدة مع الإبقاء على البقية (ttl nil = الإبقاء على TTL المجموعة)
-client.AddResourceRecordValue("example.com", "www", "A", "192.0.2.10", nil, true)
-client.ReplaceResourceRecordValue("example.com", "www", "A", "192.0.2.10", "192.0.2.11", nil, true)
-client.RemoveResourceRecordValue("example.com", "www", "A", "192.0.2.11", true)
-
-// حذف اسم+نوع بالكامل (knownValue "" = البحث عن قيمة حالية أولًا)
-client.DeleteResourceRecordSet("example.com", "www", "A", true, "")
-
-// استدعاءات منخفضة المستوى (المحتوى سلسلة نصية أو []string)
-client.AddResourceRecord("example.com", "api", "CNAME", "example.com.", 300, false)
-client.EditResourceRecord("example.com", "api", "api", "CNAME", "www.example.com.", 300, false)
-client.DeleteResourceRecord("example.com", "old.example.com.", "192.0.2.99", "A", false)
-client.ApplyResourceRecords("example.com")
-```
-
-<details>
-<summary>أمثلة على مخرجات إدارة منطقة DNS</summary>
-
-```go
-// GetResourceRecords
-map[string]any{"result": "OK", "data": map[string]any{"records": []any{
-	map[string]any{"Name": "example.com.", "Type": "A", "TTL": int64(3600), "Content": "192.0.2.1", "Disabled": false},
-	map[string]any{"Name": "www.example.com.", "Type": "CNAME", "TTL": int64(300), "Content": "example.com.", "Disabled": false},
-}}}
-
-// SetResourceRecordSet, AddResourceRecordValue, ReplaceResourceRecordValue, RemoveResourceRecordValue
-map[string]any{"result": "OK", "data": map[string]any{
-	"Name": "", "Type": "MX", "TTL": int64(3600), "Contents": []any{"10 mx1.example.com", "20 mx2.example.com"},
-}}
-
-// القيمة موجودة مسبقًا / غير موجودة: لا يُكتب شيء
-map[string]any{"result": "OK", "data": map[string]any{"Name": "", "Type": "MX", "Contents": []any{"..."}, "Changed": false}}
-
-// DeleteResourceRecordSet لمجموعة غير موجودة
-map[string]any{"result": "OK", "data": map[string]any{"Name": "nothing", "Type": "A", "Removed": false}}
-
-// AddResourceRecord / EditResourceRecord
-map[string]any{"result": "OK", "data": map[string]any{"Name": "api", "Type": "CNAME", "TTL": int64(300), "Content": "example.com."}}
-
-// DeleteResourceRecord
-map[string]any{"result": "OK", "data": map[string]any{"Name": "old.example.com.", "Type": "A", "Content": "192.0.2.99"}}
-
-// ApplyResourceRecords
-map[string]any{"result": "OK", "data": map[string]any{"DomainName": "example.com"}}
-```
-
-</details>
-
-<hr style="border: 4px solid #000; border-style: dashed;">
 
 ### إعادة توجيه URL
 
 ```go
-client.SetForwarding("example.com", "https://www.example.org", "Standard") // أو "Frame" (مُقنَّع)
-client.GetForwarding("example.com")
-client.DeleteForwarding("example.com")
+err = client.Domains.SetForwarding(ctx, "example.com", "https://www.example.org", dna.ForwardTypeStandard)
+f, err := client.Domains.Forwarding(ctx, "example.com") // nil عندما لا يكون للنطاق إعادة توجيه
+err = client.Domains.DeleteForwarding(ctx, "example.com")
 ```
 
-<details>
-<summary>أمثلة على مخرجات إعادة توجيه URL</summary>
+### مستندات السجل (.tr)
 
 ```go
-// SetForwarding
-map[string]any{"result": "OK", "data": map[string]any{"RedirectAddress": "https://www.example.org", "ForwardType": "Standard"}}
-
-// GetForwarding
-map[string]any{"result": "OK", "data": map[string]any{"Enabled": true, "RedirectAddress": "https://www.example.org", "ForwardType": "Standard"}}
-
-// GetForwarding عند عدم إعداد أي إعادة توجيه
-map[string]any{"result": "OK", "data": map[string]any{"Enabled": false, "RedirectAddress": "", "ForwardType": ""}}
-
-// DeleteForwarding (تكون Removed مساوية لـ false عندما لا يكون هناك شيء مُعدّ)
-map[string]any{"result": "OK", "data": map[string]any{"DomainName": "example.com", "Removed": true}}
+doc, err := dna.DocumentFromFile(dna.DocumentTypeIdentityCard, "id.pdf")
+res, err := client.Domains.UploadDocuments(ctx, "example.com.tr", doc)
+page, err := client.Domains.Documents(ctx, dna.DomainDocumentsListRequest{DomainName: "example.com.tr"})
 ```
 
-</details>
+تُرمَّز الملفات بـ base64 نيابةً عنك؛ ويُتحقق من الصيغة (PDF وJPG وPNG وDOC وDOCX وODT) والحجم (10 MB لكل ملف، و50 MB
+لكل طلب) قبل الرفع.
 
-فقط إجابة البوابة "Redirect information not found" تعني "غير مُعدّ"؛ وأي خطأ آخر، مثل نطاق
-غير معروف، يُعاد كخطأ.
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### الأدوات المساعدة (دون اتصال بالشبكة)
+### شهادات SSL
 
 ```go
-client.IsTrTLD("example.com.tr") // true
-
-client.ValidateContact(map[string]any{"FirstName": " Jo ", "Phone": "+90 (532) 374 33 88", "Country": "Turkey"})
-// map[string]any{"FirstName": "Jo", "LastName": "Jo", "AddressLine1": "Addres yok", "City": "ISTANBUL",
-//   "State": "ISTANBUL", "Country": "TR", "ZipCode": "34000", "Phone": "5323743388",
-//   "PhoneCountryCode": "90", "Fax": "", "FaxCountryCode": ""}
+csr, err := client.SSL.GenerateCSR(ctx, dna.SSLGenerateCSRRequest{
+	DomainName: "example.com", Country: "TR", State: "Istanbul", Locality: "Istanbul",
+	Organization: "Example Ltd", OrganizationUnit: "IT",
+})
+_, err = client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // يخصم من الرصيد
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
+	DomainName: "example.com", CSR: csr.CSR, ApproverMail: "admin@example.com",
+	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
+})
+st, err := client.SSL.Status(ctx, "example.com") // استعلم دوريًا حتى تصبح st.IsIssued صحيحة
+cert, err := client.SSL.Content(ctx, "example.com")
+os.WriteFile("example.com.crt", []byte(cert.Chain()), 0o644)
 ```
 
-تملأ `ValidateContact` الحقول الناقصة بقيم بديلة، وتزيل الأرقام وعلامات الترقيم من الأسماء،
-وتستخدم المدينة عند غياب الولاية، وتحوّل أسماء الدول الشائعة إلى رموز ISO، وتفصل أرقام الهاتف
-والفاكس إلى الرقم ورمز الدولة. الرقم المكتوب ببادئته الدولية الخاصة (`+44 20 ...` و `0044 20 ...`)
-يحتفظ برمز دولته الخاص حتى عند إعطاء رمز آخر.
-
-<hr style="border: 4px solid #000; border-style: dashed;">
-
-### التشخيص
+### الاستضافة
 
 ```go
-client.GetRequestData()        // {"url": ..., "method": ..., "payload": ...} لآخر استدعاء
-client.GetResponseData()       // آخر استجابة مفكوكة، أو {"raw_response": body}
-client.GetResponseHeaders()    // {"url", "http_code", "content_type", "total_time", "headers"}
-client.GetParsedResponseData() // آخر استجابة محلَّلة، أو الخطأ {Code, Message, Details}
-client.GetLastFunction()       // مثلًا "request:GET domains/info"
-client.GetServiceURL()         // عنوان URL الأساسي للبوابة
-client.SetServiceURL("https://ote.domainresellerapi.com/api/v1")
+packages, err := client.Hosting.Packages(ctx)
+created, err := client.Hosting.Create(ctx, "example.com", "Linux-Starter") // يخصم من الرصيد
+
+ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+defer cancel()
+st, err := client.Hosting.Wait(ctx, created.ServiceID) // يستعلم دوريًا حتى يصبح نشطًا
+fmt.Println(st.PanelAddress, st.Username, st.Password)
 ```
 
-يحتفظ `Client` بهذه الحالة الخاصة بكل استدعاء، لذا لا تشارك `Client` واحدًا بين عدة goroutines؛ بل أنشئ
-واحدًا لكل goroutine.
+لا تستدعِ `Create` مرة أخرى لاستضافة ما زالت قيد التجهيز: فهذا يخصم الرسوم مرتين.
 
-## معالجة الأخطاء
-
-- تُعيد أخطاء البوابة `Code: "API_<HTTP status>"`. وعندما ترسل البوابة رمز خطأ خاصًا بها
-  (مثل `Dna.DomainService:Domain:10007`)، يُضاف بوصفه `GatewayCode`، ليتمكن المستدعي من التمييز بين
-  "النطاق غير موجود" و"TLD غير مدعوم". تأتي الرسالة من البوابة؛ ويصبح جسم الخطأ الفارغ
-  `HTTP 429 - Too Many Requests` (وهكذا)، وتُسرد أخطاء التحقق حقلًا تلو الآخر
-  في `Details` (`Admin PostalCode - 'PostalCode' is required`)، وتُستبدل العبارات النمطية للواجهة الخلفية مثل
-  `Exception of type '...' was thrown` بتفاصيل البوابة، أو برسالة ثابتة تذكر رمز الخطأ — ولا تُستبدل
-  أبدًا بجسم الاستجابة الخام.
-- الاستجابة 301/302 تعني أن بيانات الاعتماد قد رُفضت: `Message: "Invalid API credentials"`.
-- أعطال النقل (انتهاء المهلة، DNS، TLS، إعادة تعيين الاتصال) تُعدّ أخطاء، ولا تكون أبدًا نجاحًا فارغًا.
-  عند انتهاء المهلة تُعاد `Code: "CURL_28"` والرسالة `Could not reach the DomainNameAPI service: the connection
-  timed out. (...)`؛ وتستخدم الأعطال الأخرى أرقامًا على نمط curl (`CURL_6` لـ DNS، و `CURL_7` للاتصال،
-  و `CURL_35` لـ TLS، و `CURL_56` لإعادة التعيين، و `CURL_60` للشهادة) مع الرسالة `Curl error during request: ...`.
-  الصيغة `API_<n>` محجوزة لحالات HTTP.
-- إجابات التسجيل والنقل والتجديد ذات HTTP 200 مع `"success": false` تُعدّ رفضًا:
-  `REGISTER_DOMAIN` أو `TRANSFER_DOMAIN` أو `RENEW_DOMAIN` مع رسالة البوابة.
-- جسم النجاح الفارغ أو `null` يُعيد `Code: "RESPONSE"`.
-- المهل الزمنية: 30 ثانية لكل استدعاء، و 10 ثوانٍ لإنشاء الاتصال.
-
-## وضع الاختبار
-
-مرّر `true` (أو `"true"` أو `"1"` أو `"on"` أو `"yes"`) كوسيط ثالث للدالة الإنشائية لاستخدام بوابة
-الاختبار OTE ‏`https://ote.domainresellerapi.com/api/v1`. يُوسَم القياس عن بُعد في وضع الاختبار بـ
-`environment: ote`.
-
-## القياس عن بُعد (تقارير الأخطاء)
-
-عندما يفشل استدعاء API، يمكن للمكتبة إرسال تقرير خطأ إلى نظام تتبع الأخطاء الخاص بـ DomainNameAPI
-(Sentry). كما يُرسَل جزء صغير عشوائي من الاستدعاءات الناجحة (4%، بالإضافة إلى كل استدعاء تتجاوز مدته ثانية واحدة)
-كسجل أداء. تقارير الأخطاء **مفعّلة افتراضيًا**.
-
-**ما يتم إرساله:** رمز الخطأ ورسالته؛ مسار نقطة النهاية وطريقة HTTP؛ مدة الاستدعاء؛ اسم المكتبة
-(`DomainNameAPI-Go`) وإصدار المكتبة وإصدار Go؛ معرّف الموزع (Reseller ID) واسم النطاق؛ عنوان IP
-العام للخادم (يتم الحصول عليه عبر `api.ipify.org`)؛ اسم مستخدم نظام التشغيل؛ طلب API
-والاستجابة بما في ذلك بيانات الاتصال. يتم إخفاء بيانات الاعتماد فقط: تُستبدل رموز EPP/auth ومفاتيح API
-وكلمات المرور والرموز المميزة (tokens) بـ `***`.
-
-**ما لا يتم إرساله أبدًا:** رموز EPP/auth أو مفاتيح API أو كلمات المرور أو الرموز المميزة (tokens) بصيغة مقروءة؛ وسائط
-استدعاءات الدوال في تتبع المكدس (stack traces).
-
-**لماذا وإلى متى:** تُستخدم البيانات فقط لقياس الاستخدام والتشخيص المبكر للمشكلات،
-وتُحفظ لمدة 30 يومًا على خادم Sentry الخاص بـ DomainNameAPI.
-
-**الإيقاف، أو إرسال الحد الأدنى:**
+### الرصيد والأسعار والطلبات
 
 ```go
-client := dna.New(resellerID, apiKey, false)
-client.SetErrorReportingEnabled(false) // لا يُرسَل أي شيء
+account, err := client.Account.Get(ctx)
+usd, _ := account.Balance("USD")
 
-client.SetTelemetryMinimal(true) // فقط رمز الخطأ/رسالته، ونقطة النهاية، والتوقيت، والإصدارات، ومعرّف الموزع
+for tx, err := range client.Account.AllTransactions(ctx, dna.AccountTransactionsRequest{From: monthStart}) {
+	if err != nil {
+		return err
+	}
+	fmt.Println(tx.CreationTime, tx.Type, tx.Change())
+}
+
+if tld, err := client.Products.TLD(ctx, "com.tr"); err == nil && tld != nil {
+	price, _ := tld.RegisterPrice(1)
+	fmt.Println(tld.Name, price)
+}
+
+info, err := client.Products.Info(ctx, "com", dna.OrderRenew, 2) // سعر تجديد .com لمدة سنتين
+order, err := client.Orders.Get(ctx, "ORDER-CODE")
 ```
 
-يعمل القياس عن بُعد في الخلفية، ولا يحجب الاستدعاء لمدة طويلة أبدًا، ولا يُسبب panic في شيفرتك أبدًا.
+## الطلبات و BaseRequest
 
-> 🔒 **الأمان:** التحقق من شهادة TLS مفعّل. على خادم تكون حزمة شهادات CA فيه قديمة، يمكن
-> إيقافه باستخدام `client.SetSSLVerification(false)` — غير مستحسن؛ تحديث حزمة CA هو
-> الحل الأفضل.
-
-## الخيارات المتقدمة
+كل عملية في API هي نوع طلب: `DomainInfoRequest` و `DNSAddRequest` و `SSLConfigureRequest` وغيرها. وجميعها
+تنفّذ واجهة واحدة:
 
 ```go
-client := dna.New(resellerID, apiKey, false,
-	dna.WithHTTPClient(myHTTPClient),      // أي نوع يملك Do(*http.Request) (*http.Response, error)
-	dna.WithSentryDSN("https://key@host/1"),
-	dna.WithTelemetryClient(myHTTPClient),
-)
+type Request interface {
+	Endpoint() Endpoint      // الطريقة والمسار وفئة الأمان
+	Query() url.Values       // سلسلة الاستعلام، أو nil
+	Body() any               // جسم JSON، أو nil
+	Validate() error         // يُفحص قبل إرسال أي شيء
+}
 ```
 
-عند استخدام عميل HTTP مخصص، اضبط المهل الزمنية والوكلاء (proxies) و TLS عليه؛ ويجب ألّا يتبع عمليات
-إعادة التوجيه (أعِد `http.ErrUseLastResponse` من `CheckRedirect`).
+لا توجد وراثة في Go، لذا فإن «الصنف الأساسي» هو بنية تضمّنها في بنيتك. توفّر `dna.BaseRequest` القيم
+الافتراضية (لا استعلام، ولا جسم، ولا شيء للتحقق منه)؛ ويتجاوز الطلب دالةً ما بتعريفها على نوعه الخاص. وحدها
+`Endpoint` ليس لها تنفيذ افتراضي. يبدو طلب من هذه الحزمة هكذا:
 
-## الاختبارات
+```go
+type DomainRenewRequest struct {
+	BaseRequest
+	DomainName string
+	Years      int
+}
 
-لا يلزم تثبيت Go على الجهاز المضيف؛ يكفي Docker:
+func (DomainRenewRequest) Endpoint() Endpoint {
+	return Endpoint{Method: http.MethodPost, Path: "/api/v1/domains/renew", Safety: Billable}
+}
+
+func (r DomainRenewRequest) Body() any { return domainBody(r.DomainName).set("period", r.Years) }
+
+func (r DomainRenewRequest) Validate() error {
+	var v validator
+	v.required("domainName", r.DomainName)
+	v.check(r.Years >= 1 && r.Years <= 10, "years", "must be between 1 and 10")
+	return v.err()
+}
+```
+
+تبني دوال الخدمات هذه الطلبات نيابةً عنك. ترسل `client.Do` أي `Request`، بما في ذلك أنواعك الخاصة، مثلًا
+لقراءة الحقول التي تحتاجها فقط أو لاستدعاء نقطة نهاية لم تغلّفها هذه الحزمة بعد:
+
+```go
+type ExpiryRequest struct {
+	dna.BaseRequest
+	DomainName string
+}
+
+func (ExpiryRequest) Endpoint() dna.Endpoint {
+	return dna.Endpoint{Method: http.MethodGet, Path: "/api/v1/domains/info", Safety: dna.Read}
+}
+
+func (r ExpiryRequest) Query() url.Values { return url.Values{"DomainName": {r.DomainName}} }
+
+var out struct {
+	ExpirationDate dna.Time `json:"expirationDate"`
+}
+resp, err := client.Do(ctx, ExpiryRequest{DomainName: "example.com"}, &out)
+```
+
+يحصل طلبك على كل ما تحصل عليه الطلبات المضمَّنة: بيانات الاعتماد، وإعادة المحاولة، وضبط الوتيرة، وتوحيد
+الأخطاء، ومعرّفات الارتباط، والتتبع، وفرض وضع القراءة فقط. تبني `client.NewHTTPRequest(ctx, req)` طلب HTTP
+الفعلي من دون إرساله، لتسجّل طلبًا مُحاسَبًا عليه أو تراجعه قبل خروجه.
+
+## الأخطاء
+
+| الخطأ                  | متى                                                        | حقول مفيدة                                                       |
+|------------------------|------------------------------------------------------------|------------------------------------------------------------------|
+| `*dna.InputError`      | رفضت `Validate` الطلب؛ **لم يُرسَل شيء**                   | `Request`, `Fields`                                              |
+| `*dna.APIError`        | ردّت API بحالة غير 2xx                                     | `StatusCode`, `Code`, `Message`, `Details`, `Fields`, `Data`, `CorrelationID`, `Hint()` |
+| `*dna.OperationError`  | ردّت API بحالة 2xx مع `"success": false`                   | `Code`, `Message`, `CorrelationID`                               |
+| `*dna.NetworkError`    | لم يكتمل الطلب (DNS أو TLS أو انتهاء المهلة أو إعادة ضبط الاتصال) | `Err`, `Timeout()`                                        |
+| `dna.ErrReadOnly`      | منع عميل للقراءة فقط تغييرًا؛ لم يُرسَل شيء                | استخدم `errors.Is`                                               |
+
+تصنّف `dna.KindOf(err)` أيًّا منها: `KindAuth` و `KindNotFound` و `KindValidation` و `KindRejected` و
+`KindConflict` و `KindRateLimited` و `KindServer` و `KindNetwork` و `KindInvalidInput` و `KindReadOnly`. وتجيب
+الدوال المساعدة عن الأسئلة الشائعة:
+
+```go
+_, err := client.Domains.Renew(ctx, "example.com", 1)
+var apiErr *dna.APIError
+switch {
+case err == nil:
+case dna.OutcomeUnknown(err):
+	// ربما تمّ التجديد. تحقّق من النطاق قبل المحاولة مرة أخرى.
+case dna.IsInsufficientBalance(err):
+case dna.IsNotFound(err):
+case dna.HasCode(err, dna.CodePrivacyNotSupported):
+case errors.As(err, &apiErr):
+	log.Println(apiErr.Code, apiErr.Message, apiErr.Hint(), apiErr.CorrelationID)
+}
+```
+
+فرّع على `Code` لا على `Message`: فالرسائل مترجَمة محليًا. تبدو رموز API هكذا
+`Dna.DomainService:Domain:10007`؛ راجع [مرجع الأخطاء](https://www.domainnameapi.com/docs/reference/errors.md).
+اذكر `CorrelationID` عند التواصل مع الدعم.
+
+## الأمان والموثوقية
+
+- **فئات الأمان.** كل طلب هو `Read` أو `Write` أو `Destructive` أو `Billable` (`req.Endpoint().Safety`).
+  بعض طلبات POST و PUT هي عمليات قراءة (`DomainSearchRequest` و `SSLStatusRequest`).
+- **وضع القراءة فقط.** يمنع `dna.WithReadOnly()` كل ما ليس قراءة، لمهام إعداد التقارير ولاستكشاف
+  بيئة الإنتاج بأمان.
+- **إعادة المحاولة.** تُعاد محاولة استجابات 429 دائمًا مع احترام `Retry-After`: إذ ترفضها API قبل أن تنفّذ
+  أي شيء. أما أخطاء الشبكة والاستجابات 502/503/504 فلا تُعاد محاولتها إلا للقراءات والكتابات المتماثلة القوى (idempotent)، فلا
+  يُرسَل تسجيل أو تجديد مرتين أبدًا. بعد فشل طلب مُحاسَب عليه، افحص `dna.OutcomeUnknown(err)`.
+- **ضبط الوتيرة.** يباعد العميل بين الطلبات ليبقى تحت الحدود المفروضة لكل مفتاح (5 طلبات/ثانية، وبحثان/ثانية،
+  واستدعاء واحد للمنطقة كل ثانية). عطّله بـ `dna.WithPacing(false)` إذا كنت تضبط الوتيرة بنفسك.
+- **الحصة.** يكشف `Response.Quota` ترويسات الحصة المرنة. عند تجاوز الحد تبطئ API الاستجابات (حتى
+  5 ثوانٍ) بدلًا من رفضها؛ وتترك المهلة الافتراضية البالغة 60 ثانية متسعًا لذلك.
+- **معرّفات الارتباط.** يحمل كل طلب ترويسة `X-Correlation-ID`. عيّن معرّفك بنفسك عبر
+  `dna.WithCorrelationID(ctx, id)` لربط استدعاءات API بسجلاتك.
+- **قابلية المراقبة.** يسجّل `dna.WithLogger(slog.Default())` كل تبادل؛ ويسلّمك `dna.WithTrace(func(dna.TraceEvent))`
+  كل طلب واستجابة ومحاولة إعادة، لأغراض المقاييس أو الإبلاغ عن الأخطاء. ولا يظهر مفتاح API فيها أبدًا.
+- **التزامن.** الكائن `Client` آمن للاستخدام المتزامن. أنشئ واحدًا وشاركه.
+- **فكّ ترميز متسامح.** تُفكّ بنجاح التواريخ بلا منطقة زمنية، و`null`، و`[]` بدل `{}`، والحالات الرقمية أو المسمّاة،
+  والأدوار بأي حالة أحرف (`"registrant"` و `"ADMINISTRATIVE"`).
+
+## خيارات العميل
+
+| الخيار                          | التأثير                                                                                  |
+|---------------------------------|------------------------------------------------------------------------------------------|
+| `WithEnvironment(dna.OTE)`      | استخدام بيئة الاختبار (الافتراضي `dna.Production`)                                       |
+| `WithBaseURL(url)`              | إرسال الطلبات إلى وسيط (proxy) أو خادم اختبار                                            |
+| `WithHTTPClient(hc)`            | `*http.Client` الخاص بك (النقل، الوسيط، TLS)؛ ولا تُتبَّع إعادة التوجيه أبدًا            |
+| `WithTimeout(d)`                | مهلة كل محاولة (الافتراضي 60 s)                                                          |
+| `WithUserAgent("app/1.0")`      | وضع اسم منتجك قبل User-Agent                                                             |
+| `WithCurrency("TRY")`           | عملة أسعار البحث والكتالوج                                                               |
+| `WithRetries(n)`                | عدد إعادات المحاولة (الافتراضي 2)                                                        |
+| `WithPacing(false)`             | تعطيل ضبط الوتيرة من جهة العميل                                                          |
+| `WithReadOnly()`                | منع كل طلب ليس قراءة                                                                     |
+| `WithLogger(l)`                 | تسجيل التبادلات في `*slog.Logger`                                                        |
+| `WithTrace(fn)`                 | مراقبة كل طلب واستجابة ومحاولة إعادة                                                     |
+
+## اختبار شيفرتك
+
+وجّه العميل إلى `httptest.Server`؛ ولا حاجة إلى محاكاة أي شيء آخر:
+
+```go
+srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprint(w, `{"success":true,"info":{"domainName":"example.com","status":"AVAILABLE","price":11.99,"currency":"USD"}}`)
+}))
+defer srv.Close()
+
+client, _ := dna.NewClient("reseller-id", "api-key", dna.WithBaseURL(srv.URL), dna.WithPacing(false))
+a, err := client.Domains.Search(ctx, "example.com")
+```
+
+## الانتقال من v1
+
+الإصدار v2 تصميم جديد: نتائج مُنمَّطة بدل `map[string]any`، وأخطاء (errors) بدل أغلفة `{"result": "ERROR"}`،
+وAPI كاملة بدل مجموعة دوال php-dna. تغيّر مسار الوحدة إلى
+`github.com/domainreseller/go-dna/v2`، لذا يستمر v1 في العمل إلى أن تنتقل.
+
+| v1                                                  | v2                                                                     |
+|-----------------------------------------------------|------------------------------------------------------------------------|
+| `dna.New(id, key, true)`                            | `dna.NewClient(id, key, dna.WithEnvironment(dna.OTE))`                 |
+| `res["result"] == "OK"`                             | `err == nil`                                                           |
+| `GetResellerDetails`, `GetCurrentBalance`           | `Account.Get` (+ `Account.Balance("USD")`)                             |
+| `CheckAvailability`                                 | `Domains.Search`, `Domains.BulkSearch`                                 |
+| `GetList`                                           | `Domains.List`, `Domains.All`                                          |
+| `GetTldList`                                        | `Products.TLDs`, `Products.AllTLDs`, `Products.TLD`                    |
+| `GetDetails`, `GetContacts`, `SyncFromRegistry`     | `Domains.Info`                                                         |
+| `RegisterWithContactInfo`                           | `Domains.RegisterWithContacts` (أو `Contacts.Create` + `Domains.Register`) |
+| `Renew`, `Transfer`, `CheckTransfer`                | `Domains.Renew`, `Domains.Transfer`, `Domains.TransferCheck`           |
+| `ModifyNameServer`                                  | `Domains.SetNameServers`                                               |
+| `EnableTheftProtectionLock` / `Disable...`          | `Domains.Lock` / `Domains.Unlock`                                      |
+| `ModifyPrivacyProtectionStatus`                     | `Domains.SetPrivacy`                                                   |
+| `SaveContacts`                                      | `Domains.UpdateContacts`, `Domains.SetContactHandles`                  |
+| `AddChildNameServer`, `ModifyChildNameServer`, `DeleteChildNameServer` | `Domains.AddHost`, `Domains.UpdateHost`, `Domains.DeleteHost` |
+| `GetResourceRecords`                                | `DNS.List`                                                             |
+| `AddResourceRecord`, `AddResourceRecordValue`       | `DNS.Add`                                                              |
+| `EditResourceRecord`, `SetResourceRecordSet`, `ReplaceResourceRecordValue` | `DNS.Update`                                    |
+| `DeleteResourceRecord`, `RemoveResourceRecordValue`, `DeleteResourceRecordSet` | `DNS.Delete` (مرة لكل قيمة)                 |
+| `ApplyResourceRecords`                              | `DNS.Apply`                                                            |
+| `GetForwarding`, `SetForwarding`, `DeleteForwarding`| `Domains.Forwarding`, `Domains.SetForwarding`, `Domains.DeleteForwarding` |
+| `CancelTransfer`, `ApproveTransfer`, `RejectTransfer` | غير موجودة في API المنشورة؛ أرسل [طلبًا من تصميمك](#الطلبات-و-baserequest) إن كان حسابك يتيحها |
+| `IsTrTLD`, `ValidateContact`                        | `strings.HasSuffix(name, ".tr")`؛ ويجري التحقق مع كل طلب               |
+| `GetRequestData`, `GetResponseData`, ...            | `WithTrace`, `WithLogger`, و`Response` الناتج عن `client.Do`           |
+| القياس عن بُعد (`SetErrorReportingEnabled`, Sentry) | أُزيل: لا شيء يغادر عمليتك؛ مرّر أحداث `WithTrace` إلى نظام الإبلاغ الخاص بك |
+| `SetSSLVerification(false)`                         | `WithHTTPClient` مع إعدادات TLS الخاصة بك                              |
+
+## التطوير
 
 ```bash
-docker run --rm -v "$PWD":/src -w /src golang:1.23 go test ./...
-docker run --rm -v "$PWD":/src -w /src golang:1.23 go vet ./...
+go test ./...          # اختبارات الوحدة؛ لا يلمس أيٌّ منها الشبكة
+go vet ./...
+gofmt -l .
 ```
 
-تتضمن مجموعة الاختبارات اختبارات وحدات لطبقة HTTP وربط الأخطاء والقياس عن بُعد والأدوات المساعدة،
-واختبار توافق يعيد تشغيل جميع حالات php-dna البالغ عددها 134 من `testdata/conformance` (يجب أن تتطابق
-الطلبات المُرسَلة عبر الشبكة والقيم المُعادة مع php-dna تمامًا). لا يتصل أي اختبار بالشبكة.
+الملف `testdata/openapi.json` هو مستند OpenAPI الخاص بـ API. تفحص الاختبارات كل نوع طلب مقابله (الطريقة،
+والمسار، وأسماء الاستعلام، وحقول الجسم، والحقول المطلوبة)، وأسماء JSON لكل نوع استجابة مقابل مخططات
+الاستجابة، وكل قيمة تعداد، وتفشل عندما تكتسب API عملية جديدة بلا نوع طلب لها. لتحديثه:
 
-## رموز العودة والأخطاء مع تفسيراتها
+```bash
+curl -fsSL -A "go-dna-spec-update" -o testdata/openapi.json https://api.domainresellerapi.com/swagger/v1/swagger.json
+go test ./...
+```
 
-| الرمز | الوصف | التفاصيل |
-|------|------|------|
-| 1000 | تم تنفيذ الأمر بنجاح | العملية ناجحة. |
-| 1001 | تم تنفيذ الأمر بنجاح؛ الإجراء معلق | العملية ناجحة. ولكن العملية حاليًا في قائمة الانتظار للإكمال. |
-| 2003 | معلمة مطلوبة مفقودة | خطأ في المعلمات المفقودة. على سبيل المثال، عدم إدخال رقم الهاتف في معلومات الاتصال. |
-| 2105 | الكائن غير مؤهل للتجديد | حالة النطاق غير مناسبة للتجديد، وهو مقفل لعمليات التحديث. يجب ألّا تكون الحالة "clientupdateprohibited". قد يكون ذلك بسبب شروط حالة أخرى. |
-| 2200 | خطأ في المصادقة | خطأ في التفويض، رمز الأمان غير صحيح أو النطاق مسجل لدى شركة تسجيل أخرى. |
-| 2302 | الكائن موجود | اسم النطاق أو معلومات خادم الأسماء موجودة بالفعل في قاعدة البيانات. لا يمكن التسجيل. |
-| 2303 | الكائن غير موجود | اسم النطاق أو معلومات خادم الأسماء غير موجودة في قاعدة البيانات. يلزم تسجيل جديد. |
-| 2304 | حالة الكائن تمنع العملية | حالة النطاق غير مناسبة للتحديث، وهو مقفل لعمليات التحديث. يجب ألّا تكون الحالة "clientupdateprohibited". قد يكون ذلك بسبب شروط حالة أخرى. |
+راجع [AGENTS.md](AGENTS.md) لمعرفة أعراف هذا المستودع.
 
-رموز المكتبة: `RESPONSE` (استجابة فارغة)، و `CREDENTIALS` (صيغة استجابة غير صالحة من نقطة نهاية
-الحساب)، و `AVAILABILITY` (لم تُعطَ أسماء نطاقات)، و `BALANCE` (عملة لا يُبلغ عنها الحساب)،
-و `TRANSFER_NOT_AVAILABLE`، و `REGISTER_DOMAIN` / `TRANSFER_DOMAIN` / `RENEW_DOMAIN` (رفضت البوابة
-العملية)، و `DOMAIN_RENEW` (تجديد دون تاريخ انتهاء)، و `ADD_ZONE` و `EDIT_ZONE` و `SET_ZONE` و `DELETE_ZONE`
-(نوع سجل غير مدعوم أو قيمة غير موجودة)، و `SET_FORWARD` (نوع إعادة توجيه غير مدعوم أو عنوان فارغ)،
-و `CURL_<n>` (عطل في النقل)، و `API_<status>` (خطأ HTTP، مع `GatewayCode` عندما ترسل البوابة رمزها الخاص).
+## الدعم
+
+- توثيق API: <https://www.domainnameapi.com/docs/>
+- CLI وخادم MCP: <https://github.com/domainreseller/cli>
+- الموقع: <https://www.domainnameapi.com>
 
 ## الترخيص
 
-Apache License 2.0 — راجع [LICENSE](LICENSE).
+Apache License 2.0. راجع [LICENSE](LICENSE).
