@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-22
+
 **Breaking, and forced by the API.** On 2026-11-20 the API changed its SSL endpoints: a domain can now have
 several certificates, so an existing certificate is addressed by its `certificateId` (a GUID) and no longer by
 its domain name. The API rejects the old requests, so the SSL calls of 2.0.0 that name a domain no longer work
