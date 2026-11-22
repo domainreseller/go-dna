@@ -2,17 +2,28 @@ package dna
 
 import (
 	"context"
+	"iter"
 	"net/http"
 	"net/url"
 	"strings"
 )
 
-// SSLService buys, configures, issues, reissues and revokes SSL
+// SSLService buys, configures, issues, reissues, renews and revokes SSL
 // certificates. CLI: dna ssl ...
 //
 // The flow: find a package with Products.SSLs, GenerateCSR (or bring your
-// own), Initialize (charges the balance), Configure, then poll Status until
-// the certificate is issued and download it with Content.
+// own), Initialize (charges the balance; keep the CertificateID it returns),
+// Configure within 15 days, then poll Status until the certificate is issued
+// and download it with Content.
+//
+// A domain can have several certificates, so every operation on an existing
+// certificate takes its certificate id (a GUID), never the domain name.
+// Initialize and Renew return the id; List finds it by domain name.
+//
+// To renew a certificate, call Renew (charges the balance) and Configure the
+// new certificate it returns. Do not call Initialize again for that: it is an
+// unrelated purchase at the purchase price, and the old certificate would
+// never become "Renewed".
 type SSLService service
 
 // SSLContact is the contact of a certificate order.
@@ -87,8 +98,11 @@ type CSRInfo struct {
 
 // SSLOperationResult is the API's answer to a certificate operation.
 type SSLOperationResult struct {
-	Success       bool   `json:"success"`
-	Message       string `json:"message"`
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	// CertificateID identifies the certificate. Store it: every later call
+	// for the certificate takes it. After Renew it is the id of the new
+	// (renewal) certificate, not of the one that was renewed.
 	CertificateID string `json:"certificateId"`
 	Status        string `json:"status"`
 	// DCVDetails tells how to complete domain control validation (e.g. the
@@ -100,6 +114,7 @@ type SSLOperationResult struct {
 
 // CertificateStatus is the current state of a certificate.
 type CertificateStatus struct {
+	CertificateID string `json:"certificateId"`
 	DomainName    string `json:"domainName"`
 	Status        string `json:"status"`
 	StatusMessage string `json:"statusMessage"`
@@ -110,12 +125,15 @@ type CertificateStatus struct {
 
 // Certificate is the full record of a certificate.
 type Certificate struct {
-	DomainName   string `json:"domainName"`
-	Status       string `json:"status"`
-	IsConfigured bool   `json:"isConfigured"`
-	IsIssued     bool   `json:"isIssued"`
-	PackageName  string `json:"packageName"`
-	PackageCode  string `json:"packageCode"`
+	CertificateID string `json:"certificateId"`
+	DomainName    string `json:"domainName"`
+	Status        string `json:"status"`
+	IsConfigured  bool   `json:"isConfigured"`
+	IsIssued      bool   `json:"isIssued"`
+	PackageName   string `json:"packageName"`
+	PackageCode   string `json:"packageCode"`
+	// Subscription is the paid term. Renew is allowed from 30 days before
+	// Subscription.ExpiresAt.
 	Subscription struct {
 		PurchasedAt Time `json:"purchasedAt"`
 		ExpiresAt   Time `json:"expiresAt"`
@@ -139,8 +157,37 @@ type Certificate struct {
 	Contacts []SSLContact `json:"contacts"`
 }
 
+// CertificateListItem is a certificate in the certificate list. SSL.Get
+// returns more.
+type CertificateListItem struct {
+	// CertificateID is what the other SSL operations take.
+	CertificateID string `json:"certificateId"`
+	DomainName    string `json:"domainName"`
+	PackageCode   string `json:"packageCode"`
+	PackageName   string `json:"packageName"`
+	// Status is the state of the certificate: "Active", "WaitingForInstall"
+	// (bought, not configured yet), "WaitingForValidation", "Cancelled",
+	// "Renewed" (superseded by its renewal), ...
+	Status string `json:"status"`
+	// StatusReason explains the status, mainly for "Cancelled": "None",
+	// "ConfigurationWindowExpired", "ResellerRevoked", ...
+	StatusReason string `json:"statusReason"`
+	IsConfigured bool   `json:"isConfigured"`
+	IsIssued     bool   `json:"isIssued"`
+	// PurchasedAt and SubscriptionExpiresAt are the paid term.
+	PurchasedAt           Time `json:"purchasedAt"`
+	SubscriptionExpiresAt Time `json:"subscriptionExpiresAt"`
+	// CertificateExpiresAt is the end of the technical validity; zero until
+	// the certificate is issued.
+	CertificateExpiresAt Time `json:"certificateExpiresAt"`
+	// RenewedFromCertificateID is set on a renewal: the id of the
+	// certificate it renews.
+	RenewedFromCertificateID string `json:"renewedFromCertificateId"`
+}
+
 // CertificateContent is an issued certificate and its chain, PEM-encoded.
 type CertificateContent struct {
+	CertificateID string `json:"certificateId"`
 	Certificate   string `json:"certificate"`
 	Intermediate1 string `json:"intermediateCertificate1"`
 	Intermediate2 string `json:"intermediateCertificate2"`
@@ -215,7 +262,8 @@ func (r SSLCheckCSRRequest) Validate() error {
 }
 
 // SSLInitializeRequest buys a certificate package for a domain. It charges
-// your balance. CLI: dna ssl initialize
+// your balance. The result carries the CertificateID of the new certificate,
+// which must be configured within 15 days. CLI: dna ssl initialize
 type SSLInitializeRequest struct {
 	BaseRequest
 	DomainName string
@@ -242,8 +290,11 @@ func (r SSLInitializeRequest) Validate() error {
 // certificate for issuance. CLI: dna ssl configure
 type SSLConfigureRequest struct {
 	BaseRequest
-	DomainName string
-	// CSR is PEM-encoded.
+	// CertificateID is the certificate to configure: the CertificateID
+	// returned by Initialize or Renew.
+	CertificateID string
+	// CSR is PEM-encoded. Its common name must match the certificate's
+	// domain.
 	CSR string
 	// PrivateKey is PEM-encoded; optional when the CSR was made elsewhere.
 	PrivateKey string
@@ -262,7 +313,7 @@ func (SSLConfigureRequest) Endpoint() Endpoint {
 }
 
 func (r SSLConfigureRequest) Body() any {
-	return object{"domainName": trim(r.DomainName), "csr": trim(r.CSR), "contact": r.Contact.normalized()}.
+	return object{"certificateId": trim(r.CertificateID), "csr": trim(r.CSR), "contact": r.Contact.normalized()}.
 		set("privateKey", r.PrivateKey).
 		set("approverMail", r.ApproverMail).
 		set("authenticationType", string(r.AuthenticationType)).
@@ -273,7 +324,7 @@ func (r SSLConfigureRequest) Body() any {
 
 func (r SSLConfigureRequest) Validate() error {
 	var v validator
-	v.required("domainName", r.DomainName)
+	v.certificateID("certificateId", r.CertificateID)
 	v.required("csr", r.CSR)
 	v.check(r.ApproverMail == "" || strings.Contains(r.ApproverMail, "@"), "approverMail", "is not an e-mail address")
 	r.Contact.validate(&v)
@@ -284,20 +335,20 @@ func (r SSLConfigureRequest) Validate() error {
 // CLI: dna ssl status
 type SSLStatusRequest struct {
 	BaseRequest
-	DomainName string
+	CertificateID string
 }
 
 func (SSLStatusRequest) Endpoint() Endpoint {
 	return Endpoint{Method: http.MethodPut, Path: "/api/v1/ssls/check-status", Safety: Read}
 }
 
-func (r SSLStatusRequest) Body() any       { return domainBody(r.DomainName) }
-func (r SSLStatusRequest) Validate() error { return requireDomain(r.DomainName) }
+func (r SSLStatusRequest) Body() any       { return certificateBody(r.CertificateID) }
+func (r SSLStatusRequest) Validate() error { return requireCertificateID(r.CertificateID) }
 
 // SSLGetRequest reads the full record of a certificate. CLI: dna ssl get
 type SSLGetRequest struct {
 	BaseRequest
-	DomainName string
+	CertificateID string
 }
 
 func (SSLGetRequest) Endpoint() Endpoint {
@@ -305,15 +356,15 @@ func (SSLGetRequest) Endpoint() Endpoint {
 }
 
 func (r SSLGetRequest) Query() url.Values {
-	return newParams().str("DomainName", r.DomainName).Values
+	return newParams().str("CertificateId", r.CertificateID).Values
 }
 
-func (r SSLGetRequest) Validate() error { return requireDomain(r.DomainName) }
+func (r SSLGetRequest) Validate() error { return requireCertificateID(r.CertificateID) }
 
 // SSLContentRequest downloads an issued certificate. CLI: dna ssl content
 type SSLContentRequest struct {
 	BaseRequest
-	DomainName string
+	CertificateID string
 }
 
 func (SSLContentRequest) Endpoint() Endpoint {
@@ -321,19 +372,19 @@ func (SSLContentRequest) Endpoint() Endpoint {
 }
 
 func (r SSLContentRequest) Query() url.Values {
-	return newParams().str("DomainName", r.DomainName).Values
+	return newParams().str("CertificateId", r.CertificateID).Values
 }
 
-func (r SSLContentRequest) Validate() error { return requireDomain(r.DomainName) }
+func (r SSLContentRequest) Validate() error { return requireCertificateID(r.CertificateID) }
 
 // SSLReissueRequest reissues a certificate with a new CSR, key or approver.
 // CLI: dna ssl reissue
 type SSLReissueRequest struct {
 	BaseRequest
-	DomainName   string
-	ApproverMail string
-	CSR          string
-	PrivateKey   string
+	CertificateID string
+	ApproverMail  string
+	CSR           string
+	PrivateKey    string
 }
 
 func (SSLReissueRequest) Endpoint() Endpoint {
@@ -341,17 +392,24 @@ func (SSLReissueRequest) Endpoint() Endpoint {
 }
 
 func (r SSLReissueRequest) Body() any {
-	return domainBody(r.DomainName).set("approverMail", r.ApproverMail).set("csr", r.CSR).set("privateKey", r.PrivateKey)
+	return certificateBody(r.CertificateID).set("approverMail", r.ApproverMail).set("csr", r.CSR).set("privateKey", r.PrivateKey)
 }
 
-func (r SSLReissueRequest) Validate() error { return requireDomain(r.DomainName) }
+func (r SSLReissueRequest) Validate() error { return requireCertificateID(r.CertificateID) }
 
 // SSLApproversRequest lists the e-mail addresses allowed for e-mail
-// validation. CLI: dna ssl approvers
+// validation. Set CertificateID for an existing certificate, or DomainName
+// and PackageCode before a purchase. CLI: dna ssl approvers
 type SSLApproversRequest struct {
 	BaseRequest
+	// CertificateID is an existing certificate. The API takes the domain and
+	// the package from it and ignores DomainName and PackageCode.
+	CertificateID string
+	// DomainName is the domain you are about to buy a certificate for. It
+	// needs PackageCode.
 	DomainName string
-	// PackageCode narrows the list to a package; optional.
+	// PackageCode is the package you are about to buy: an
+	// SSLProduct.ProductCode from Products.SSLs.
 	PackageCode string
 }
 
@@ -360,16 +418,27 @@ func (SSLApproversRequest) Endpoint() Endpoint {
 }
 
 func (r SSLApproversRequest) Query() url.Values {
-	return newParams().str("DomainName", r.DomainName).str("PackageCode", r.PackageCode).Values
+	return newParams().str("CertificateId", r.CertificateID).str("DomainName", r.DomainName).str("PackageCode", r.PackageCode).Values
 }
 
-func (r SSLApproversRequest) Validate() error { return requireDomain(r.DomainName) }
+func (r SSLApproversRequest) Validate() error {
+	var v validator
+	switch {
+	case trim(r.CertificateID) != "":
+		v.certificateID("certificateId", r.CertificateID)
+	case trim(r.DomainName) == "":
+		v.add("certificateId", "or domainName with packageCode is required: pass CertificateID for an existing certificate, or DomainName and PackageCode before a purchase")
+	case trim(r.PackageCode) == "":
+		v.add("packageCode", "is required with domainName (the package you are about to buy, see Products.SSLs); for an existing certificate pass CertificateID instead")
+	}
+	return v.err()
+}
 
 // SSLRevokeRequest revokes a certificate. This cannot be undone.
 // CLI: dna ssl revoke
 type SSLRevokeRequest struct {
 	BaseRequest
-	DomainName string
+	CertificateID string
 }
 
 func (SSLRevokeRequest) Endpoint() Endpoint {
@@ -377,10 +446,54 @@ func (SSLRevokeRequest) Endpoint() Endpoint {
 }
 
 func (r SSLRevokeRequest) Query() url.Values {
-	return newParams().str("DomainName", r.DomainName).Values
+	return newParams().str("CertificateId", r.CertificateID).Values
 }
 
-func (r SSLRevokeRequest) Validate() error { return requireDomain(r.DomainName) }
+func (r SSLRevokeRequest) Validate() error { return requireCertificateID(r.CertificateID) }
+
+// SSLRenewRequest renews a certificate: it opens a new one-year certificate
+// linked to it. It charges your balance (the renewal price).
+// CLI: dna ssl renew
+type SSLRenewRequest struct {
+	BaseRequest
+	// CertificateID is the certificate to renew.
+	CertificateID string
+}
+
+func (SSLRenewRequest) Endpoint() Endpoint {
+	return Endpoint{Method: http.MethodPost, Path: "/api/v1/ssls/renew", Safety: Billable}
+}
+
+func (r SSLRenewRequest) Body() any       { return certificateBody(r.CertificateID) }
+func (r SSLRenewRequest) Validate() error { return requireCertificateID(r.CertificateID) }
+
+// SSLListRequest lists your certificates, newest first. CLI: dna ssl list
+type SSLListRequest struct {
+	BaseRequest
+	// ListOptions pages the list. The API's default page size is 10 and the
+	// largest is 1000. Sort is not supported: the order is always newest
+	// first.
+	ListOptions
+	// DomainName keeps only the certificates of this domain. For wildcard
+	// certificates both "*.example.com" and "example.com" match.
+	DomainName string
+}
+
+func (SSLListRequest) Endpoint() Endpoint {
+	return Endpoint{Method: http.MethodGet, Path: "/api/v1/ssls", Safety: Read}
+}
+
+func (r SSLListRequest) Query() url.Values {
+	return newParams().str("DomainName", r.DomainName).num("SkipCount", r.Skip).num("MaxResultCount", r.Limit).Values
+}
+
+func (r SSLListRequest) Validate() error {
+	var v validator
+	r.ListOptions.validate(&v)
+	v.check(r.Limit <= 1000, "limit", "must be at most 1000")
+	v.check(trim(r.Sort) == "", "sort", "is not supported: certificates are always listed newest first")
+	return v.err()
+}
 
 // GenerateCSR returns a new CSR and its private key.
 func (s *SSLService) GenerateCSR(ctx context.Context, req SSLGenerateCSRRequest) (*CSR, error) {
@@ -393,31 +506,37 @@ func (s *SSLService) CheckCSR(ctx context.Context, csr string) (*CSRInfo, error)
 }
 
 // Initialize buys a certificate package for a domain and charges your
-// balance. Then call Configure.
+// balance. Store the CertificateID of the result: Configure and every later
+// call take it. Configure the certificate within 15 days; after that it is
+// cancelled (refundable packages are refunded automatically).
+//
+// Do not use Initialize to renew a certificate: see Renew.
 func (s *SSLService) Initialize(ctx context.Context, domainName, packageCode string) (*SSLOperationResult, error) {
 	return s.operation(ctx, SSLInitializeRequest{DomainName: domainName, PackageCode: packageCode})
 }
 
-// Configure submits the CSR, validation method and contact. Then poll
-// Status until IsIssued.
+// Configure submits the CSR, validation method and contact of a certificate
+// bought with Initialize or Renew. Then poll Status until IsIssued.
 func (s *SSLService) Configure(ctx context.Context, req SSLConfigureRequest) (*SSLOperationResult, error) {
 	return s.operation(ctx, req)
 }
 
-// Status refreshes and returns the state of a certificate.
-func (s *SSLService) Status(ctx context.Context, domainName string) (*CertificateStatus, error) {
-	return call[CertificateStatus](ctx, s.client, SSLStatusRequest{DomainName: domainName})
+// Status refreshes and returns the state of a certificate. certificateID is
+// the CertificateID returned by Initialize or Renew (List finds it by domain
+// name).
+func (s *SSLService) Status(ctx context.Context, certificateID string) (*CertificateStatus, error) {
+	return call[CertificateStatus](ctx, s.client, SSLStatusRequest{CertificateID: certificateID})
 }
 
 // Get returns the full record of a certificate: subscription,
 // configuration and contacts.
-func (s *SSLService) Get(ctx context.Context, domainName string) (*Certificate, error) {
-	return call[Certificate](ctx, s.client, SSLGetRequest{DomainName: domainName})
+func (s *SSLService) Get(ctx context.Context, certificateID string) (*Certificate, error) {
+	return call[Certificate](ctx, s.client, SSLGetRequest{CertificateID: certificateID})
 }
 
 // Content returns the issued certificate and its chain.
-func (s *SSLService) Content(ctx context.Context, domainName string) (*CertificateContent, error) {
-	return call[CertificateContent](ctx, s.client, SSLContentRequest{DomainName: domainName})
+func (s *SSLService) Content(ctx context.Context, certificateID string) (*CertificateContent, error) {
+	return call[CertificateContent](ctx, s.client, SSLContentRequest{CertificateID: certificateID})
 }
 
 // Reissue reissues a certificate with a new CSR, key or approver.
@@ -425,12 +544,15 @@ func (s *SSLService) Reissue(ctx context.Context, req SSLReissueRequest) (*SSLOp
 	return s.operation(ctx, req)
 }
 
-// Approvers lists the e-mail addresses allowed for e-mail validation.
-// packageCode is optional.
-func (s *SSLService) Approvers(ctx context.Context, domainName, packageCode string) ([]string, error) {
+// Approvers lists the e-mail addresses allowed for e-mail validation: of an
+// existing certificate, or of a domain and package before a purchase.
+//
+//	mails, err := client.SSL.Approvers(ctx, dna.SSLApproversRequest{CertificateID: id})
+//	mails, err := client.SSL.Approvers(ctx, dna.SSLApproversRequest{DomainName: "example.com", PackageCode: "PositiveSSL"})
+func (s *SSLService) Approvers(ctx context.Context, req SSLApproversRequest) ([]string, error) {
 	res, err := call[struct {
 		Mails []string `json:"mails"`
-	}](ctx, s.client, SSLApproversRequest{DomainName: domainName, PackageCode: packageCode})
+	}](ctx, s.client, req)
 	if err != nil {
 		return nil, err
 	}
@@ -438,8 +560,49 @@ func (s *SSLService) Approvers(ctx context.Context, domainName, packageCode stri
 }
 
 // Revoke revokes a certificate. This cannot be undone.
-func (s *SSLService) Revoke(ctx context.Context, domainName string) (*SSLOperationResult, error) {
-	return s.operation(ctx, SSLRevokeRequest{DomainName: domainName})
+func (s *SSLService) Revoke(ctx context.Context, certificateID string) (*SSLOperationResult, error) {
+	return s.operation(ctx, SSLRevokeRequest{CertificateID: certificateID})
+}
+
+// Renew renews a certificate and charges your balance (the renewal price).
+// It opens a new one-year certificate linked to the old one; the package and
+// the domain are taken from the old certificate.
+//
+// The result's CertificateID is the id of the new certificate, which waits
+// for configuration: pass it to Configure within 15 days, then poll Status.
+// The old certificate keeps its own id, stays valid until it expires and
+// becomes "Renewed" once the new one is active.
+//
+// The API allows a renewal from 30 days before the subscription ends
+// (Certificate.Subscription.ExpiresAt) and only once per certificate; it
+// refuses earlier, repeated or otherwise impossible renewals with an
+// *APIError. Calling Renew again while the renewal still waits for
+// configuration returns the same renewal and does not charge again, so that
+// is the way to recover when OutcomeUnknown(err) is true.
+func (s *SSLService) Renew(ctx context.Context, certificateID string) (*SSLOperationResult, error) {
+	return s.operation(ctx, SSLRenewRequest{CertificateID: certificateID})
+}
+
+// List returns one page of your certificates, newest first. Use it to find
+// the CertificateID of a certificate by its domain name.
+func (s *SSLService) List(ctx context.Context, req SSLListRequest) (*Page[CertificateListItem], error) {
+	return call[Page[CertificateListItem]](ctx, s.client, req)
+}
+
+// All iterates over every matching certificate, newest first, fetching pages
+// as needed:
+//
+//	for cert, err := range client.SSL.All(ctx, dna.SSLListRequest{DomainName: "example.com"}) {
+//		if err != nil {
+//			return err
+//		}
+//		fmt.Println(cert.CertificateID, cert.Status, cert.SubscriptionExpiresAt)
+//	}
+func (s *SSLService) All(ctx context.Context, req SSLListRequest) iter.Seq2[CertificateListItem, error] {
+	return paginate(req.ListOptions, func(o ListOptions) (*Page[CertificateListItem], error) {
+		req.ListOptions = o
+		return s.List(ctx, req)
+	})
 }
 
 func (s *SSLService) operation(ctx context.Context, req Request) (*SSLOperationResult, error) {

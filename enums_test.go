@@ -43,6 +43,8 @@ func TestEveryEnum(t *testing.T) {
 	checkEnum(t, dsRecordStatusNames, nil)
 	checkEnum(t, dnssecAlgorithmNames, ParseDNSSECAlgorithm)
 	checkEnum(t, dsDigestTypeNames, ParseDSDigestType)
+	checkEnum(t, accountCurrencyNames, nil)
+	checkEnum(t, resellerStatusNames, nil)
 	checkEnum(t, transactionTypeNames, ParseTransactionType)
 	checkEnum(t, transactionStatusNames, nil)
 	checkEnum(t, chargeTypeNames, nil)
@@ -61,11 +63,12 @@ func TestEveryEnum(t *testing.T) {
 // an enum must be listed here, and each of its values must have a name.
 func TestSpecEnums(t *testing.T) {
 	const (
-		domains = "Dna.DomainService.Domains."
-		dnssec  = "Dna.DomainService.Dnssec."
-		deposit = "Dna.DepositService.Accounts."
-		orders  = "Dna.OrderService.Orders."
-		product = "Dna.ProductService.Products."
+		domains  = "Dna.DomainService.Domains."
+		dnssec   = "Dna.DomainService.Dnssec."
+		deposit  = "Dna.DepositService.Accounts."
+		orders   = "Dna.OrderService.Orders."
+		product  = "Dna.ProductService.Products."
+		reseller = "Dna.ResellerService.Resellers."
 	)
 	known := map[string]map[int]string{
 		domains + "DomainDto.status":                              toInts(domainStatusNames),
@@ -89,6 +92,8 @@ func TestSpecEnums(t *testing.T) {
 		product + "ProductDto.productType":                        toInts(productTypeNames),
 		product + "ProductInfoDto.productType":                    toInts(productTypeNames),
 		product + "SubproductDto.productType":                     toInts(productTypeNames),
+		reseller + "ResellerMeDto.accountCurrency":                toInts(accountCurrencyNames),
+		reseller + "ResellerMeDto.status":                         toInts(resellerStatusNames),
 	}
 	d := loadSpec(t)
 	seen := map[string]bool{}

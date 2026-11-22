@@ -492,6 +492,45 @@ const (
 // ---------------------------------------------------------------------------
 // Account, orders and products
 
+// AccountCurrency is the currency a reseller account is kept in.
+type AccountCurrency int
+
+const (
+	AccountCurrencyTRY  AccountCurrency = 1
+	AccountCurrencyUSD  AccountCurrency = 2
+	AccountCurrencyEURO AccountCurrency = 3 // the euro; the API's name for it is "EURO", not the ISO code
+)
+
+var accountCurrencyNames = map[AccountCurrency]string{1: "TRY", 2: "USD", 3: "EURO"}
+
+func (c AccountCurrency) String() string {
+	return enumString(c, accountCurrencyNames, "AccountCurrency")
+}
+
+// UnmarshalJSON accepts the number or the name.
+func (c *AccountCurrency) UnmarshalJSON(b []byte) error {
+	return unmarshalEnum(b, c, accountCurrencyNames)
+}
+
+// ResellerStatus is the state of a reseller account.
+type ResellerStatus int
+
+const (
+	ResellerStatusActive                     ResellerStatus = 0
+	ResellerStatusWaitingForApproval         ResellerStatus = 1
+	ResellerStatusSuspend                    ResellerStatus = 2 // suspended
+	ResellerStatusWaitingForCompletionWizard ResellerStatus = 3
+)
+
+var resellerStatusNames = map[ResellerStatus]string{0: "Active", 1: "WaitingForApproval", 2: "Suspend", 3: "WaitingForCompletionWizard"}
+
+func (s ResellerStatus) String() string { return enumString(s, resellerStatusNames, "ResellerStatus") }
+
+// UnmarshalJSON accepts the number or the name.
+func (s *ResellerStatus) UnmarshalJSON(b []byte) error {
+	return unmarshalEnum(b, s, resellerStatusNames)
+}
+
 // TransactionType is the kind of a balance transaction.
 type TransactionType int
 

@@ -20,7 +20,7 @@
 النطاقات وتسجيلها وتجديدها ونقلها، وDNS، وDNSSEC، وجهات الاتصال، وشهادات SSL، والاستضافة، والطلبات، وكتالوج
 المنتجات، ورصيدك.
 
-- **جميع عمليات API الأربع والستين**، مجمّعة بالطريقة نفسها المتّبعة في [`dna` CLI](https://github.com/domainreseller/cli):
+- **جميع عمليات API السبع والستين**، مجمّعة بالطريقة نفسها المتّبعة في [`dna` CLI](https://github.com/domainreseller/cli):
   الأمر `dna domain info` يقابله `client.Domains.Info`، والأمر `dna dns add` يقابله `client.DNS.Add`.
 - **نتائج وقيم تعداد مُنمَّطة**: `d.Status == dna.DomainStatusPendingDelete` و `d.ExpirationDate.Before(...)`،
   بلا `map[string]any`.
@@ -111,12 +111,12 @@ client, err := dna.NewClientFromEnv(dna.WithUserAgent("my-panel/1.4"))
 
 | الخدمة            | مجموعة CLI    | العمليات                                                                                                                                                          |
 |-------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `client.Account`  | `dna account` | `Get`, `Transactions`, `AllTransactions`                                                                                                                          |
+| `client.Account`  | `dna account` | `Get`, `Profile`, `Transactions`, `AllTransactions`                                                                                                               |
 | `client.Contacts` | `dna contact` | `Get`, `Create`, `Update`, `Verification`, `ResendVerification`                                                                                                   |
 | `client.Domains`  | `dna domain`  | `Search`, `BulkSearch`, `List`, `All`, `Info`, `Register`, `RegisterWithContacts`, `Renew`, `RenewCheck`, `Restore`, `Transfer`, `TransferCheck`, `TransferStatus`, `Lock`, `Unlock`, `SetPrivacy`, `UpdateAuthCode`, `SetNameServers`, `AddHost`, `UpdateHost`, `DeleteHost`, `UpdateContacts`, `SetContactHandles`, `Documents`, `UploadDocuments`, `Forwarding`, `SetForwarding`, `DeleteForwarding` |
 | `client.DNS`      | `dna dns`     | `List`, `Add`, `Update`, `Delete`, `Apply`                                                                                                                        |
 | `client.DNSSEC`   | `dna dnssec`  | `Get`, `Add`, `Remove`, `Disable`                                                                                                                                 |
-| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Approvers`, `Revoke`                                                |
+| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Renew`, `Approvers`, `Revoke`, `List`, `All`                        |
 | `client.Hosting`  | `dna hosting` | `Packages`, `Plans`, `Create`, `Wait`, `Get`, `GetByToken`, `Status`                                                                                              |
 | `client.Orders`   | `dna order`   | `Get`                                                                                                                                                             |
 | `client.Products` | `dna product` | `List`, `Info`, `TLDs`, `AllTLDs`, `TLD`, `SSLs`                                                                                                                  |
@@ -300,19 +300,53 @@ page, err := client.Domains.Documents(ctx, dna.DomainDocumentsListRequest{Domain
 
 ### شهادات SSL
 
+قد يكون للنطاق الواحد أكثر من شهادة، ولذلك يُشار إلى الشهادة القائمة بـ**معرّف الشهادة** (GUID) لا باسم النطاق.
+تُعيد `Initialize` و`Renew` هذا المعرّف (احتفظ به)، وتعثر عليه `SSL.List` انطلاقًا من اسم النطاق. وإذا مُرِّر اسم نطاق
+في موضع معرّف الشهادة رُفض الطلب بخطأ `*dna.InputError` قبل إرسال أي شيء.
+
 ```go
 csr, err := client.SSL.GenerateCSR(ctx, dna.SSLGenerateCSRRequest{
 	DomainName: "example.com", Country: "TR", State: "Istanbul", Locality: "Istanbul",
 	Organization: "Example Ltd", OrganizationUnit: "IT",
 })
-_, err = client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // يخصم من الرصيد
-_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
-	DomainName: "example.com", CSR: csr.CSR, ApproverMail: "admin@example.com",
+order, err := client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // يخصم من الرصيد
+id := order.CertificateID                                              // احتفظ به: كل استدعاء لاحق يتطلبه
+
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{ // خلال 15 يومًا
+	CertificateID: id, CSR: csr.CSR, ApproverMail: "admin@example.com",
 	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
 })
-st, err := client.SSL.Status(ctx, "example.com") // استعلم دوريًا حتى تصبح st.IsIssued صحيحة
-cert, err := client.SSL.Content(ctx, "example.com")
+st, err := client.SSL.Status(ctx, id) // استعلم دوريًا حتى تصبح st.IsIssued صحيحة
+cert, err := client.SSL.Content(ctx, id)
 os.WriteFile("example.com.crt", []byte(cert.Chain()), 0o644)
+```
+
+تُلغى الشهادة التي لا تُهيَّأ خلال 15 يومًا من `Initialize` أو `Renew`.
+
+تُعيد `SSL.List` شهاداتك من الأحدث إلى الأقدم (وتمرّ `SSL.All` عليها جميعًا). وتسرد `SSL.Approvers` العناوين التي
+يقبلها التحقق عبر البريد الإلكتروني، لشهادة قائمة أو قبل الشراء:
+
+```go
+page, err := client.SSL.List(ctx, dna.SSLListRequest{DomainName: "example.com"})
+for _, c := range page.Items {
+	fmt.Println(c.CertificateID, c.Status, c.SubscriptionExpiresAt)
+}
+
+mails, err := client.SSL.Approvers(ctx, dna.SSLApproversRequest{CertificateID: id})
+mails, err = client.SSL.Approvers(ctx, dna.SSLApproversRequest{DomainName: "example.com", PackageCode: "PositiveSSL"})
+```
+
+لتجديد شهادة، استدعِ `Renew` ثم هيّئ بـ`Configure` الشهادة الجديدة التي تُعيدها. تخصم `Renew` من الرصيد، وهي متاحة
+ابتداءً من 30 يومًا قبل انتهاء الاشتراك. لا تجدّد باستدعاء `Initialize` مرة ثانية: فذلك شراء مستقل بسعر الشراء، ولن
+تنتقل الشهادة القديمة أبدًا إلى الحالة `Renewed`.
+
+```go
+renewal, err := client.SSL.Renew(ctx, id) // يخصم من الرصيد
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
+	CertificateID: renewal.CertificateID, // الشهادة الجديدة؛ القديمة تحتفظ بمعرّفها
+	CSR: newCSR.CSR, ApproverMail: "admin@example.com",
+	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
+})
 ```
 
 ### الاستضافة
@@ -334,6 +368,7 @@ fmt.Println(st.PanelAddress, st.Username, st.Password)
 ```go
 account, err := client.Account.Get(ctx)
 usd, _ := account.Balance("USD")
+profile, err := client.Account.Profile(ctx) // profile.Name, profile.AccountCurrency, profile.Status
 
 for tx, err := range client.Account.AllTransactions(ctx, dna.AccountTransactionsRequest{From: monthStart}) {
 	if err != nil {

@@ -20,7 +20,7 @@
 注册、续费与转入、DNS、DNSSEC、联系人、SSL 证书、主机托管、订单、产品
 目录以及账户余额。
 
-- **全部 64 个 API 操作**，分组方式与 [`dna` CLI](https://github.com/domainreseller/cli) 一致：
+- **全部 67 个 API 操作**，分组方式与 [`dna` CLI](https://github.com/domainreseller/cli) 一致：
   `dna domain info` 对应 `client.Domains.Info`，`dna dns add` 对应 `client.DNS.Add`。
 - **类型化的结果与枚举**：`d.Status == dna.DomainStatusPendingDelete`、`d.ExpirationDate.Before(...)`，
   不再使用 `map[string]any`。
@@ -111,12 +111,12 @@ client, err := dna.NewClientFromEnv(dna.WithUserAgent("my-panel/1.4"))
 
 | 服务              | CLI 分组      | 操作                                                                                                                                                              |
 |-------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `client.Account`  | `dna account` | `Get`, `Transactions`, `AllTransactions`                                                                                                                          |
+| `client.Account`  | `dna account` | `Get`, `Profile`, `Transactions`, `AllTransactions`                                                                                                               |
 | `client.Contacts` | `dna contact` | `Get`, `Create`, `Update`, `Verification`, `ResendVerification`                                                                                                   |
 | `client.Domains`  | `dna domain`  | `Search`, `BulkSearch`, `List`, `All`, `Info`, `Register`, `RegisterWithContacts`, `Renew`, `RenewCheck`, `Restore`, `Transfer`, `TransferCheck`, `TransferStatus`, `Lock`, `Unlock`, `SetPrivacy`, `UpdateAuthCode`, `SetNameServers`, `AddHost`, `UpdateHost`, `DeleteHost`, `UpdateContacts`, `SetContactHandles`, `Documents`, `UploadDocuments`, `Forwarding`, `SetForwarding`, `DeleteForwarding` |
 | `client.DNS`      | `dna dns`     | `List`, `Add`, `Update`, `Delete`, `Apply`                                                                                                                        |
 | `client.DNSSEC`   | `dna dnssec`  | `Get`, `Add`, `Remove`, `Disable`                                                                                                                                 |
-| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Approvers`, `Revoke`                                                |
+| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Renew`, `Approvers`, `Revoke`, `List`, `All`                        |
 | `client.Hosting`  | `dna hosting` | `Packages`, `Plans`, `Create`, `Wait`, `Get`, `GetByToken`, `Status`                                                                                              |
 | `client.Orders`   | `dna order`   | `Get`                                                                                                                                                             |
 | `client.Products` | `dna product` | `List`, `Info`, `TLDs`, `AllTLDs`, `TLD`, `SSLs`                                                                                                                  |
@@ -300,19 +300,53 @@ page, err := client.Domains.Documents(ctx, dna.DomainDocumentsListRequest{Domain
 
 ### SSL 证书
 
+一个域名可以有多张证书，因此已有的证书通过**证书 ID**（一个 GUID）来指定，而不是域名。`Initialize` 和 `Renew`
+会返回该 ID（请保存），`SSL.List` 可按域名查到它。在需要证书 ID 的位置传入域名时，请求会在发送之前被拒绝，并返回
+`*dna.InputError`。
+
 ```go
 csr, err := client.SSL.GenerateCSR(ctx, dna.SSLGenerateCSRRequest{
 	DomainName: "example.com", Country: "TR", State: "Istanbul", Locality: "Istanbul",
 	Organization: "Example Ltd", OrganizationUnit: "IT",
 })
-_, err = client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // 从余额中扣费
-_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
-	DomainName: "example.com", CSR: csr.CSR, ApproverMail: "admin@example.com",
+order, err := client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // 从余额中扣费
+id := order.CertificateID                                              // 请保存：之后的每次调用都需要它
+
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{ // 15 天内完成
+	CertificateID: id, CSR: csr.CSR, ApproverMail: "admin@example.com",
 	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
 })
-st, err := client.SSL.Status(ctx, "example.com") // 轮询直到 st.IsIssued
-cert, err := client.SSL.Content(ctx, "example.com")
+st, err := client.SSL.Status(ctx, id) // 轮询直到 st.IsIssued
+cert, err := client.SSL.Content(ctx, id)
 os.WriteFile("example.com.crt", []byte(cert.Chain()), 0o644)
+```
+
+在 `Initialize` 或 `Renew` 之后 15 天内未配置的证书会被取消。
+
+`SSL.List` 按从新到旧的顺序返回你的证书（`SSL.All` 会遍历全部证书）。`SSL.Approvers` 列出邮件验证可接受的地址，
+既可用于已有证书，也可用于购买之前：
+
+```go
+page, err := client.SSL.List(ctx, dna.SSLListRequest{DomainName: "example.com"})
+for _, c := range page.Items {
+	fmt.Println(c.CertificateID, c.Status, c.SubscriptionExpiresAt)
+}
+
+mails, err := client.SSL.Approvers(ctx, dna.SSLApproversRequest{CertificateID: id})
+mails, err = client.SSL.Approvers(ctx, dna.SSLApproversRequest{DomainName: "example.com", PackageCode: "PositiveSSL"})
+```
+
+续费证书时，先调用 `Renew`，再用 `Configure` 配置它返回的新证书。`Renew` 会从余额中扣费，并且从订阅到期前 30 天
+起才可使用。不要通过再次调用 `Initialize` 来续费：那是一笔按购买价格计费的独立新购，旧证书也永远不会变为 `Renewed`
+状态。
+
+```go
+renewal, err := client.SSL.Renew(ctx, id) // 从余额中扣费
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
+	CertificateID: renewal.CertificateID, // 新证书；旧证书保留自己的 ID
+	CSR: newCSR.CSR, ApproverMail: "admin@example.com",
+	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
+})
 ```
 
 ### 主机托管
@@ -334,6 +368,7 @@ fmt.Println(st.PanelAddress, st.Username, st.Password)
 ```go
 account, err := client.Account.Get(ctx)
 usd, _ := account.Balance("USD")
+profile, err := client.Account.Profile(ctx) // profile.Name, profile.AccountCurrency, profile.Status
 
 for tx, err := range client.Account.AllTransactions(ctx, dna.AccountTransactionsRequest{From: monthStart}) {
 	if err != nil {

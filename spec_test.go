@@ -37,6 +37,7 @@ func specCases() []specCase {
 	return []specCase{
 		// account
 		{AccountGetRequest{}, Account{}},
+		{AccountProfileRequest{}, AccountProfile{}},
 		{AccountTransactionsRequest{
 			ListOptions: ListOptions{Skip: 10, Limit: 20, Sort: "creationTime desc"}, TransactionTypes: []TransactionType{TransactionRegister, TransactionRenew},
 			ProductTypes: []ProductType{ProductDomain}, ChargeType: &sub, Currencies: []string{"USD"}, From: from, To: from.AddDate(0, 1, 0),
@@ -100,15 +101,17 @@ func specCases() []specCase {
 		{SSLGenerateCSRRequest{DomainName: "example.com", Country: "TR", State: "Istanbul", Locality: "Istanbul", Organization: "Example Ltd", OrganizationUnit: "IT", AlternativeNames: []string{"www.example.com"}}, CSR{}},
 		{SSLCheckCSRRequest{CSR: "-----BEGIN CERTIFICATE REQUEST-----"}, CSRInfo{}},
 		{SSLInitializeRequest{DomainName: "example.com", PackageCode: "PositiveSSL"}, SSLOperationResult{}},
-		{SSLConfigureRequest{DomainName: "example.com", CSR: "csr", PrivateKey: "key", ApproverMail: "admin@example.com", AuthenticationType: AuthenticationEmail, WebServerType: WebServerApache, SANList: []string{"a.example.com"}, WildcardList: []string{"*.example.com"}, Contact: sampleSSLContact()}, SSLOperationResult{}},
-		{SSLStatusRequest{DomainName: "example.com"}, CertificateStatus{}},
-		{SSLGetRequest{DomainName: "example.com"}, Certificate{}},
-		{SSLContentRequest{DomainName: "example.com"}, CertificateContent{}},
-		{SSLReissueRequest{DomainName: "example.com", ApproverMail: "admin@example.com", CSR: "csr", PrivateKey: "key"}, SSLOperationResult{}},
-		{SSLApproversRequest{DomainName: "example.com", PackageCode: "PositiveSSL"}, struct {
+		{SSLConfigureRequest{CertificateID: testCertificateID, CSR: "csr", PrivateKey: "key", ApproverMail: "admin@example.com", AuthenticationType: AuthenticationEmail, WebServerType: WebServerApache, SANList: []string{"a.example.com"}, WildcardList: []string{"*.example.com"}, Contact: sampleSSLContact()}, SSLOperationResult{}},
+		{SSLStatusRequest{CertificateID: testCertificateID}, CertificateStatus{}},
+		{SSLGetRequest{CertificateID: testCertificateID}, Certificate{}},
+		{SSLContentRequest{CertificateID: testCertificateID}, CertificateContent{}},
+		{SSLReissueRequest{CertificateID: testCertificateID, ApproverMail: "admin@example.com", CSR: "csr", PrivateKey: "key"}, SSLOperationResult{}},
+		{SSLApproversRequest{CertificateID: testCertificateID, DomainName: "example.com", PackageCode: "PositiveSSL"}, struct {
 			Mails []string `json:"mails"`
 		}{}},
-		{SSLRevokeRequest{DomainName: "example.com"}, SSLOperationResult{}},
+		{SSLRevokeRequest{CertificateID: testCertificateID}, SSLOperationResult{}},
+		{SSLRenewRequest{CertificateID: testCertificateID}, SSLOperationResult{}},
+		{SSLListRequest{ListOptions: ListOptions{Skip: 5, Limit: 50}, DomainName: "example.com"}, Page[CertificateListItem]{}},
 
 		// hosting
 		{HostingPackagesRequest{}, []HostingPackage{}},

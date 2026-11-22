@@ -20,7 +20,7 @@ Getypeerde Go-client voor de reseller-REST-API van de [Domain Name API](https://
 zoeken, registreren, verlengen en verhuizen, DNS, DNSSEC, contacten, SSL-certificaten, hosting, bestellingen, de
 productcatalogus en je saldo.
 
-- **Alle 64 API-operaties**, op dezelfde manier gegroepeerd als in de [`dna` CLI](https://github.com/domainreseller/cli):
+- **Alle 67 API-operaties**, op dezelfde manier gegroepeerd als in de [`dna` CLI](https://github.com/domainreseller/cli):
   `dna domain info` is `client.Domains.Info`, `dna dns add` is `client.DNS.Add`.
 - **Getypeerde resultaten en enums**: `d.Status == dna.DomainStatusPendingDelete`, `d.ExpirationDate.Before(...)`,
   geen `map[string]any`.
@@ -111,12 +111,12 @@ Een verkeerde sleutel of omgeving mislukt bij de eerste request met een `*APIErr
 
 | Service           | CLI-groep     | Operaties                                                                                                                                                         |
 |-------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `client.Account`  | `dna account` | `Get`, `Transactions`, `AllTransactions`                                                                                                                          |
+| `client.Account`  | `dna account` | `Get`, `Profile`, `Transactions`, `AllTransactions`                                                                                                               |
 | `client.Contacts` | `dna contact` | `Get`, `Create`, `Update`, `Verification`, `ResendVerification`                                                                                                   |
 | `client.Domains`  | `dna domain`  | `Search`, `BulkSearch`, `List`, `All`, `Info`, `Register`, `RegisterWithContacts`, `Renew`, `RenewCheck`, `Restore`, `Transfer`, `TransferCheck`, `TransferStatus`, `Lock`, `Unlock`, `SetPrivacy`, `UpdateAuthCode`, `SetNameServers`, `AddHost`, `UpdateHost`, `DeleteHost`, `UpdateContacts`, `SetContactHandles`, `Documents`, `UploadDocuments`, `Forwarding`, `SetForwarding`, `DeleteForwarding` |
 | `client.DNS`      | `dna dns`     | `List`, `Add`, `Update`, `Delete`, `Apply`                                                                                                                        |
 | `client.DNSSEC`   | `dna dnssec`  | `Get`, `Add`, `Remove`, `Disable`                                                                                                                                 |
-| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Approvers`, `Revoke`                                                |
+| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Renew`, `Approvers`, `Revoke`, `List`, `All`                        |
 | `client.Hosting`  | `dna hosting` | `Packages`, `Plans`, `Create`, `Wait`, `Get`, `GetByToken`, `Status`                                                                                              |
 | `client.Orders`   | `dna order`   | `Get`                                                                                                                                                             |
 | `client.Products` | `dna product` | `List`, `Info`, `TLDs`, `AllTLDs`, `TLD`, `SSLs`                                                                                                                  |
@@ -300,19 +300,55 @@ request) worden vóór het uploaden gecontroleerd.
 
 ### SSL-certificaten
 
+Een domein kan meerdere certificaten hebben. Een bestaand certificaat wordt daarom aangeduid met zijn
+**certificaat-ID** (een GUID), nooit met de domeinnaam. `Initialize` en `Renew` geven het ID terug (bewaar het) en
+`SSL.List` zoekt het op aan de hand van de domeinnaam. Een domeinnaam op de plaats van een certificaat-ID wordt
+geweigerd met een `*dna.InputError` voordat er iets wordt verzonden.
+
 ```go
 csr, err := client.SSL.GenerateCSR(ctx, dna.SSLGenerateCSRRequest{
 	DomainName: "example.com", Country: "TR", State: "Istanbul", Locality: "Istanbul",
 	Organization: "Example Ltd", OrganizationUnit: "IT",
 })
-_, err = client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // schrijft af van het saldo
-_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
-	DomainName: "example.com", CSR: csr.CSR, ApproverMail: "admin@example.com",
+order, err := client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // schrijft af van het saldo
+id := order.CertificateID                                              // bewaar het: elke volgende aanroep heeft het nodig
+
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{ // binnen 15 dagen
+	CertificateID: id, CSR: csr.CSR, ApproverMail: "admin@example.com",
 	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
 })
-st, err := client.SSL.Status(ctx, "example.com") // blijf pollen tot st.IsIssued
-cert, err := client.SSL.Content(ctx, "example.com")
+st, err := client.SSL.Status(ctx, id) // blijf pollen tot st.IsIssued
+cert, err := client.SSL.Content(ctx, id)
 os.WriteFile("example.com.crt", []byte(cert.Chain()), 0o644)
+```
+
+Een certificaat dat niet binnen 15 dagen na `Initialize` of `Renew` is geconfigureerd, wordt geannuleerd.
+
+`SSL.List` geeft je certificaten terug, de nieuwste eerst (`SSL.All` loopt ze allemaal af). `SSL.Approvers`
+geeft de adressen die e-mailvalidatie accepteert, voor een bestaand certificaat of vóór een aankoop:
+
+```go
+page, err := client.SSL.List(ctx, dna.SSLListRequest{DomainName: "example.com"})
+for _, c := range page.Items {
+	fmt.Println(c.CertificateID, c.Status, c.SubscriptionExpiresAt)
+}
+
+mails, err := client.SSL.Approvers(ctx, dna.SSLApproversRequest{CertificateID: id})
+mails, err = client.SSL.Approvers(ctx, dna.SSLApproversRequest{DomainName: "example.com", PackageCode: "PositiveSSL"})
+```
+
+Om een certificaat te verlengen roep je `Renew` aan en configureer je daarna met `Configure` het nieuwe
+certificaat dat je terugkrijgt. `Renew` schrijft af van het saldo en kan vanaf 30 dagen voor het einde van het
+abonnement. Verleng niet met een tweede `Initialize`: dat is een losstaande aankoop tegen de aankoopprijs, en het
+oude certificaat krijgt nooit de status `Renewed`.
+
+```go
+renewal, err := client.SSL.Renew(ctx, id) // schrijft af van het saldo
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
+	CertificateID: renewal.CertificateID, // het nieuwe certificaat; het oude behoudt zijn eigen ID
+	CSR: newCSR.CSR, ApproverMail: "admin@example.com",
+	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
+})
 ```
 
 ### Hosting
@@ -334,6 +370,7 @@ Roep `Create` nooit opnieuw aan voor een hosting die nog wordt ingericht: dat sc
 ```go
 account, err := client.Account.Get(ctx)
 usd, _ := account.Balance("USD")
+profile, err := client.Account.Profile(ctx) // profile.Name, profile.AccountCurrency, profile.Status
 
 for tx, err := range client.Account.AllTransactions(ctx, dna.AccountTransactionsRequest{From: monthStart}) {
 	if err != nil {

@@ -53,6 +53,48 @@ func TestAccount(t *testing.T) {
 	}
 }
 
+func TestAccountProfile(t *testing.T) {
+	f := newFakeAPI(t, ok(`{"id":"`+testResellerID+`","resellerAutoId":1042,"name":"example","companyName":"Example Ltd","resellerGroupName":"Reseller","accountCurrency":2,"status":0,"isSubReseller":false,"isBalanceSuspended":true,"isMcpEnabled":true}`))
+	p, err := f.client().Account.Profile(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := f.last(); r.Method != http.MethodGet || r.Path != "/api/v1/resellers/me" || len(r.Query) != 0 || len(r.Body) != 0 {
+		t.Errorf("sent %s %s %v %s", r.Method, r.Path, r.Query, r.Body)
+	}
+	if p.ID != testResellerID || p.ResellerAutoID != 1042 || p.Name != "example" || p.CompanyName != "Example Ltd" || p.ResellerGroupName != "Reseller" {
+		t.Errorf("%+v", p)
+	}
+	if p.AccountCurrency != AccountCurrencyUSD || p.AccountCurrency.String() != "USD" || p.Status != ResellerStatusActive || p.Status.String() != "Active" {
+		t.Errorf("enums %v %v", p.AccountCurrency, p.Status)
+	}
+	if p.IsSubReseller || !p.IsBalanceSuspended || !p.IsMCPEnabled {
+		t.Errorf("flags %+v", p)
+	}
+
+	// The enums decode from every value the API documents, and keep an unknown one.
+	f = newFakeAPI(t, ok(`{"accountCurrency":3,"status":3}`), ok(`{"accountCurrency":1,"status":2}`), ok(`{"accountCurrency":9,"status":1}`))
+	c := f.client()
+	if p, err := c.Account.Profile(ctx); err != nil || p.AccountCurrency != AccountCurrencyEURO || p.Status != ResellerStatusWaitingForCompletionWizard {
+		t.Errorf("%+v %v", p, err)
+	}
+	if p, err := c.Account.Profile(ctx); err != nil || p.AccountCurrency != AccountCurrencyTRY || p.Status != ResellerStatusSuspend {
+		t.Errorf("%+v %v", p, err)
+	}
+	if p, err := c.Account.Profile(ctx); err != nil || p.AccountCurrency.String() != "AccountCurrency(9)" || p.Status != ResellerStatusWaitingForApproval {
+		t.Errorf("%+v %v", p, err)
+	}
+
+	// A plain read: allowed in read-only mode.
+	if ep := (AccountProfileRequest{}).Endpoint(); ep.Safety != Read {
+		t.Errorf("safety %s", ep.Safety)
+	}
+	f = newFakeAPI(t, ok(`{"id":"`+testResellerID+`"}`))
+	if _, err := f.client(WithReadOnly()).Account.Profile(ctx); err != nil || len(f.requests()) != 1 {
+		t.Errorf("read-only: %v", err)
+	}
+}
+
 func TestAccountTransactions(t *testing.T) {
 	page := func(skip int) string {
 		return fmt.Sprintf(`{"totalCount":3,"items":[{"traceId":"t%d","type":2,"status":1,"chargeType":1,"balance":88.01,"oldBalance":100,"creationTime":"2026-11-01T10:00:00"}]}`, skip)
@@ -585,13 +627,15 @@ func TestDNSSEC(t *testing.T) {
 // ssl, hosting, orders, products
 
 func TestSSL(t *testing.T) {
+	const id = testCertificateID
 	f := newFakeAPI(t,
 		ok(`{"csr":"-----BEGIN CERTIFICATE REQUEST-----","privateKey":"-----BEGIN PRIVATE KEY-----"}`),
-		ok(`{"success":true,"certificateId":"c1","status":"Initialized"}`),
-		ok(`{"success":true,"status":"Configured","dcvDetails":"CNAME _abc.example.com"}`),
-		ok(`{"domainName":"example.com","status":"Issued","isIssued":true,"certificateExpiresAt":"2027-11-19T00:00:00"}`),
-		ok(`{"certificate":"CERT","intermediateCertificate1":"INT1","intermediateCertificate2":"","rootCertificate":"ROOT"}`),
-		ok(`{"mails":["admin@example.com","webmaster@example.com"]}`),
+		ok(`{"success":true,"certificateId":"`+id+`","status":"WaitingForInstall"}`),
+		ok(`{"success":true,"certificateId":"`+id+`","status":"WaitingForValidation","dcvDetails":"CNAME _abc.example.com"}`),
+		ok(`{"certificateId":"`+id+`","domainName":"example.com","status":"Active","isIssued":true,"certificateExpiresAt":"2027-11-19T00:00:00"}`),
+		ok(`{"certificateId":"`+id+`","domainName":"example.com","status":"Active","packageCode":"PositiveSSL","subscription":{"purchasedAt":"2026-11-19T00:00:00","expiresAt":"2027-11-19T00:00:00"}}`),
+		ok(`{"certificateId":"`+id+`","certificate":"CERT","intermediateCertificate1":"INT1","intermediateCertificate2":"","rootCertificate":"ROOT"}`),
+		ok(`{"success":true,"certificateId":"`+id+`","csr":"NEWCSR","privateKey":"NEWKEY"}`),
 		ok(`{"success":false,"message":"Certificate already revoked"}`),
 	)
 	c := f.client()
@@ -602,11 +646,17 @@ func TestSSL(t *testing.T) {
 	if bodyOf(t, f.last()).(map[string]any)["country"] != "TR" {
 		t.Errorf("country not upper-cased: %s", f.last().Body)
 	}
-	if res, err := c.SSL.Initialize(ctx, "example.com", "PositiveSSL"); err != nil || res.CertificateID != "c1" {
-		t.Fatalf("%+v %v", res, err)
+
+	// Initialize still names the domain; its result carries the certificate id.
+	bought, err := c.SSL.Initialize(ctx, "example.com", "PositiveSSL")
+	if err != nil || bought.CertificateID != id {
+		t.Fatalf("%+v %v", bought, err)
 	}
+	jsonEq(t, f.last().Body, `{"domainName":"example.com","packageCode":"PositiveSSL"}`)
+
+	// Everything after that takes the certificate id, never the domain name.
 	res, err := c.SSL.Configure(ctx, SSLConfigureRequest{
-		DomainName: "example.com", CSR: csr.CSR, ApproverMail: "admin@example.com", AuthenticationType: AuthenticationCNAME,
+		CertificateID: bought.CertificateID, CSR: csr.CSR, ApproverMail: "admin@example.com", AuthenticationType: AuthenticationCNAME,
 		WebServerType: WebServerApache, SANList: []string{"a.example.com", "b.example.com"}, Contact: sampleSSLContact(),
 	})
 	if err != nil || res.DCVDetails == "" {
@@ -616,23 +666,290 @@ func TestSSL(t *testing.T) {
 	if body["sanList"] != "a.example.com,b.example.com" || body["authenticationType"] != "Cname" || body["contact"].(map[string]any)["eMail"] != "ada@example.com" {
 		t.Errorf("configure body %v", body)
 	}
-	st, err := c.SSL.Status(ctx, "example.com")
-	if err != nil || !st.IsIssued || st.ExpiresAt.Year() != 2027 || f.last().Method != http.MethodPut {
+	if _, old := body["domainName"]; old || body["certificateId"] != id {
+		t.Errorf("configure must send certificateId and no domainName: %v", body)
+	}
+
+	st, err := c.SSL.Status(ctx, id)
+	if err != nil || !st.IsIssued || st.CertificateID != id || st.ExpiresAt.Year() != 2027 || f.last().Method != http.MethodPut {
 		t.Fatalf("%+v %v", st, err)
 	}
-	cc, err := c.SSL.Content(ctx, "example.com")
-	if err != nil || cc.Chain() != "CERT\nINT1\n" {
+	jsonEq(t, f.last().Body, `{"certificateId":"`+id+`"}`)
+
+	cert, err := c.SSL.Get(ctx, id)
+	if err != nil || cert.CertificateID != id || cert.PackageCode != "PositiveSSL" || cert.Subscription.ExpiresAt.Year() != 2027 {
+		t.Fatalf("%+v %v", cert, err)
+	}
+	if r := f.last(); r.Path != "/api/v1/ssls/certificate" || r.Query.Get("CertificateId") != id || len(r.Query) != 1 {
+		t.Errorf("get: %s %v", r.Path, r.Query)
+	}
+
+	cc, err := c.SSL.Content(ctx, id)
+	if err != nil || cc.CertificateID != id || cc.Chain() != "CERT\nINT1\n" {
 		t.Fatalf("%+v %v", cc, err)
 	}
-	mails, err := c.SSL.Approvers(ctx, "example.com", "")
-	if err != nil || len(mails) != 2 || f.last().Query.Has("PackageCode") {
-		t.Fatalf("%v %v %v", mails, err, f.last().Query)
+	if r := f.last(); r.Path != "/api/v1/ssls/certificate-content" || r.Query.Get("CertificateId") != id || len(r.Query) != 1 {
+		t.Errorf("content: %s %v", r.Path, r.Query)
 	}
-	if _, err := c.SSL.Revoke(ctx, "example.com"); KindOf(err) != KindRejected {
+
+	re, err := c.SSL.Reissue(ctx, SSLReissueRequest{CertificateID: id, ApproverMail: "admin@example.com"})
+	if err != nil || re.PrivateKey != "NEWKEY" {
+		t.Fatalf("%+v %v", re, err)
+	}
+	jsonEq(t, f.last().Body, `{"certificateId":"`+id+`","approverMail":"admin@example.com"}`)
+
+	// Revoke sends the id in the query string (the API reads no body) and
+	// turns "success": false into an error.
+	if _, err := c.SSL.Revoke(ctx, id); KindOf(err) != KindRejected {
 		t.Errorf("revoke: %v", err)
 	}
-	if _, err := c.SSL.Configure(ctx, SSLConfigureRequest{DomainName: "example.com", CSR: "x"}); err == nil || !strings.Contains(err.Error(), "contact.companyName") {
+	if r := f.last(); r.Method != http.MethodDelete || r.Query.Get("CertificateId") != id || len(r.Query) != 1 || len(r.Body) != 0 {
+		t.Errorf("revoke: %s %v %s", r.Method, r.Query, r.Body)
+	}
+
+	if _, err := c.SSL.Configure(ctx, SSLConfigureRequest{CertificateID: id, CSR: "x"}); err == nil || !strings.Contains(err.Error(), "contact.companyName") {
 		t.Errorf("missing contact: %v", err)
+	}
+}
+
+func TestSSLRenew(t *testing.T) {
+	const renewal = "99999999-5717-4562-b3fc-2c963f66afa6"
+	f := newFakeAPI(t, ok(`{"success":true,"message":"SSL certificate renewal initialized successfully. Waiting for installation.","certificateId":"`+renewal+`","status":"WaitingForInstall"}`))
+	res, err := f.client().SSL.Renew(ctx, testCertificateID)
+	if err != nil || res.CertificateID != renewal || res.Status != "WaitingForInstall" {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if r := f.last(); r.Method != http.MethodPost || r.Path != "/api/v1/ssls/renew" {
+		t.Errorf("sent %s %s", r.Method, r.Path)
+	}
+	// The body names the certificate to renew; the answer names the new one.
+	jsonEq(t, f.last().Body, `{"certificateId":"`+testCertificateID+`"}`)
+
+	// Renew charges the balance, so it gets the rules of a billable request.
+	if ep := (SSLRenewRequest{}).Endpoint(); ep.Safety != Billable || ep.Idempotent {
+		t.Errorf("endpoint %+v, want billable and not idempotent", ep)
+	}
+
+	f = newFakeAPI(t, reply{Status: 503, Header: map[string]string{"Retry-After": "0"}}, ok(`{"success":true}`))
+	if _, err := f.client().SSL.Renew(ctx, testCertificateID); KindOf(err) != KindServer || len(f.requests()) != 1 {
+		t.Errorf("503: %v after %d requests; want one attempt", err, len(f.requests()))
+	}
+
+	u, n := brokenServer(t)
+	c, _ := NewClient("r", "k", WithBaseURL(u), WithPacing(false), WithRetries(2))
+	if _, err := c.SSL.Renew(ctx, testCertificateID); KindOf(err) != KindNetwork || n.Load() != 1 || !OutcomeUnknown(err) {
+		t.Errorf("network error: %v after %d attempts; want one attempt and an unknown outcome", err, n.Load())
+	}
+
+	f = newFakeAPI(t, ok(`{"success":true}`))
+	if _, err := f.client(WithReadOnly()).SSL.Renew(ctx, testCertificateID); !errors.Is(err, ErrReadOnly) || len(f.requests()) != 0 {
+		t.Errorf("read-only: %v after %d requests", err, len(f.requests()))
+	}
+
+	f = newFakeAPI(t, ok(`{"success":false,"message":"The certificate cannot be renewed"}`))
+	_, err = f.client().SSL.Renew(ctx, testCertificateID)
+	var oe *OperationError
+	if !errors.As(err, &oe) || oe.Message != "The certificate cannot be renewed" {
+		t.Errorf("success false: %v", err)
+	}
+}
+
+func TestSSLList(t *testing.T) {
+	const renewal = "99999999-5717-4562-b3fc-2c963f66afa6"
+	f := newFakeAPI(t, ok(`{"totalCount":2,"items":[
+		{"certificateId":"`+renewal+`","domainName":"example.com","packageCode":"PositiveSSL","packageName":"Positive SSL","status":"WaitingForInstall","statusReason":"None","isConfigured":false,"isIssued":false,"purchasedAt":"2027-11-01T09:00:00","subscriptionExpiresAt":"2028-11-01T09:00:00","certificateExpiresAt":null,"renewedFromCertificateId":"`+testCertificateID+`"},
+		{"certificateId":"`+testCertificateID+`","domainName":"example.com","packageCode":"PositiveSSL","packageName":"Positive SSL","status":"Active","statusReason":"None","isConfigured":true,"isIssued":true,"purchasedAt":"2026-11-19T00:00:00","subscriptionExpiresAt":"2027-11-19T00:00:00","certificateExpiresAt":"2027-11-20T23:59:59","renewedFromCertificateId":null}
+	]}`))
+	c := f.client()
+	page, err := c.SSL.List(ctx, SSLListRequest{DomainName: " example.com ", ListOptions: ListOptions{Skip: 20, Limit: 10}})
+	if err != nil || page.TotalCount != 2 || len(page.Items) != 2 {
+		t.Fatalf("%+v %v", page, err)
+	}
+	r := f.last()
+	if r.Method != http.MethodGet || r.Path != "/api/v1/ssls" {
+		t.Errorf("sent %s %s", r.Method, r.Path)
+	}
+	if q := r.Query; q.Get("DomainName") != "example.com" || q.Get("SkipCount") != "20" || q.Get("MaxResultCount") != "10" || len(q) != 3 {
+		t.Errorf("query %v", q)
+	}
+	nw, old := page.Items[0], page.Items[1]
+	if nw.CertificateID != renewal || nw.RenewedFromCertificateID != testCertificateID || nw.Status != "WaitingForInstall" || nw.IsConfigured || !nw.CertificateExpiresAt.IsZero() || nw.SubscriptionExpiresAt.Year() != 2028 {
+		t.Errorf("renewal %+v", nw)
+	}
+	if old.CertificateID != testCertificateID || old.RenewedFromCertificateID != "" || old.PackageName != "Positive SSL" || old.StatusReason != "None" || !old.IsIssued || old.PurchasedAt.Year() != 2026 || old.CertificateExpiresAt.Day() != 20 {
+		t.Errorf("renewed certificate %+v", old)
+	}
+
+	// Without options nothing but the endpoint is sent: the API's defaults apply.
+	if _, err := c.SSL.List(ctx, SSLListRequest{}); err != nil || len(f.last().Query) != 0 {
+		t.Errorf("no filter: %v %v", err, f.last().Query)
+	}
+
+	sent := len(f.requests())
+	for name, req := range map[string]SSLListRequest{
+		"sort":  {ListOptions: ListOptions{Sort: "purchasedAt desc"}},
+		"limit": {ListOptions: ListOptions{Limit: 1001}},
+		"skip":  {ListOptions: ListOptions{Skip: -1}},
+	} {
+		if _, err := c.SSL.List(ctx, req); KindOf(err) != KindInvalidInput || !strings.Contains(err.Error(), name+": ") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if len(f.requests()) != sent {
+		t.Error("an invalid list request was sent")
+	}
+}
+
+func TestSSLAll(t *testing.T) {
+	page := func(n int) reply {
+		return ok(fmt.Sprintf(`{"totalCount":3,"items":[{"certificateId":"00000000-0000-4000-8000-00000000000%d","domainName":"example.com","status":"Active"}]}`, n))
+	}
+	f := newFakeAPI(t, page(1), page(2), page(3))
+	var ids []string
+	for cert, err := range f.client().SSL.All(ctx, SSLListRequest{DomainName: "example.com", ListOptions: ListOptions{Limit: 1}}) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, cert.CertificateID[len(cert.CertificateID)-1:])
+	}
+	if strings.Join(ids, "") != "123" {
+		t.Fatalf("ids %v", ids)
+	}
+	reqs := f.requests()
+	if len(reqs) != 3 || reqs[0].Query.Has("SkipCount") || reqs[1].Query.Get("SkipCount") != "1" || reqs[2].Query.Get("SkipCount") != "2" {
+		t.Errorf("requests %+v", reqs)
+	}
+	for _, r := range reqs {
+		if r.Query.Get("DomainName") != "example.com" || r.Query.Get("MaxResultCount") != "1" || r.Query.Has("Sorting") {
+			t.Errorf("query %v", r.Query)
+		}
+	}
+
+	// The iterator asks for pages of 100 and reports a bad request as an error.
+	f = newFakeAPI(t, ok(`{"totalCount":0,"items":[]}`))
+	if got, err := collect(f.client().SSL.All(ctx, SSLListRequest{})); err != nil || len(got) != 0 || f.last().Query.Get("MaxResultCount") != "100" {
+		t.Errorf("%v %v %v", got, err, f.last().Query)
+	}
+	if _, err := collect(f.client().SSL.All(ctx, SSLListRequest{ListOptions: ListOptions{Sort: "x"}})); KindOf(err) != KindInvalidInput {
+		t.Errorf("sort: %v", err)
+	}
+}
+
+func TestSSLApprovers(t *testing.T) {
+	f := newFakeAPI(t, ok(`{"mails":["admin@example.com","webmaster@example.com"]}`))
+	c := f.client()
+
+	// An existing certificate: the id alone.
+	mails, err := c.SSL.Approvers(ctx, SSLApproversRequest{CertificateID: testCertificateID})
+	if err != nil || len(mails) != 2 || mails[0] != "admin@example.com" {
+		t.Fatalf("%v %v", mails, err)
+	}
+	if r := f.last(); r.Path != "/api/v1/ssls/approvers" || r.Query.Get("CertificateId") != testCertificateID || len(r.Query) != 1 {
+		t.Errorf("by certificate: %s %v", r.Path, r.Query)
+	}
+
+	// Before a purchase: the domain and the package.
+	mails, err = c.SSL.Approvers(ctx, SSLApproversRequest{DomainName: "example.com", PackageCode: "PositiveSSL"})
+	if err != nil || len(mails) != 2 {
+		t.Fatalf("%v %v", mails, err)
+	}
+	if q := f.last().Query; q.Get("DomainName") != "example.com" || q.Get("PackageCode") != "PositiveSSL" || len(q) != 2 {
+		t.Errorf("by domain: %v", q)
+	}
+
+	sent := len(f.requests())
+	for name, tc := range map[string]struct {
+		req  SSLApproversRequest
+		want string
+	}{
+		"nothing":                {SSLApproversRequest{}, "certificateId: or domainName with packageCode is required"},
+		"package only":           {SSLApproversRequest{PackageCode: "PositiveSSL"}, "certificateId: or domainName with packageCode is required"},
+		"domain without package": {SSLApproversRequest{DomainName: "example.com"}, "packageCode: is required with domainName"},
+		"domain as certificate":  {SSLApproversRequest{CertificateID: "example.com"}, "certificateId: must be a certificate id (GUID)"},
+		"bad id with a domain":   {SSLApproversRequest{CertificateID: "c1", DomainName: "example.com", PackageCode: "PositiveSSL"}, "certificateId: must be a certificate id (GUID)"},
+	} {
+		_, err := c.SSL.Approvers(ctx, tc.req)
+		var ie *InputError
+		if !errors.As(err, &ie) || ie.Request != "SSLApproversRequest" || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if len(f.requests()) != sent {
+		t.Error("an invalid approvers request was sent")
+	}
+}
+
+// TestSSLCertificateIDGuard: certificates used to be addressed by domain
+// name, and a certificate id is a string too. A domain name passed by an old
+// caller must fail before anything is sent, with a message that says what to
+// do instead.
+func TestSSLCertificateIDGuard(t *testing.T) {
+	f := newFakeAPI(t, ok(`{"success":true}`))
+	c := f.client()
+	calls := map[string]func(id string) error{
+		"SSLStatusRequest":  func(id string) error { _, err := c.SSL.Status(ctx, id); return err },
+		"SSLGetRequest":     func(id string) error { _, err := c.SSL.Get(ctx, id); return err },
+		"SSLContentRequest": func(id string) error { _, err := c.SSL.Content(ctx, id); return err },
+		"SSLRevokeRequest":  func(id string) error { _, err := c.SSL.Revoke(ctx, id); return err },
+		"SSLRenewRequest":   func(id string) error { _, err := c.SSL.Renew(ctx, id); return err },
+		"SSLReissueRequest": func(id string) error {
+			_, err := c.SSL.Reissue(ctx, SSLReissueRequest{CertificateID: id})
+			return err
+		},
+		"SSLConfigureRequest": func(id string) error {
+			_, err := c.SSL.Configure(ctx, SSLConfigureRequest{CertificateID: id, CSR: "csr", Contact: sampleSSLContact()})
+			return err
+		},
+		"SSLApproversRequest": func(id string) error {
+			_, err := c.SSL.Approvers(ctx, SSLApproversRequest{CertificateID: id})
+			return err
+		},
+	}
+	for name, do := range calls {
+		for _, bad := range []string{
+			"example.com", "*.example.com", "c1",
+			"3fa85f64-5717-4562-b3fc-2c963f66afa", "3fa85f64-5717-4562-b3fc-2c963f66afa6a", // too short, too long
+			"3fa85f6457174562b3fc2c963f66afa6", "{3fa85f64-5717-4562-b3fc-2c963f66afa6}", // no dashes, braces
+			"3fa85f64-5717-4562-b3fc-2c963f66afag", "3fa85f64_5717_4562_b3fc_2c963f66afa6", // not hex, wrong separator
+		} {
+			err := do(bad)
+			var ie *InputError
+			if !errors.As(err, &ie) || KindOf(err) != KindInvalidInput || ie.Request != name || len(ie.Fields) != 1 || ie.Fields[0].Field != "certificateId" {
+				t.Errorf("%s(%q): got %v", name, bad, err)
+				continue
+			}
+			for _, want := range []string{"must be a certificate id (GUID)", "no longer addressed by domain name", "SSL.Initialize or SSL.Renew", "SSL.List(ctx, SSLListRequest{DomainName: domainName})"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("%s(%q): message lacks %q: %v", name, bad, want, err)
+				}
+			}
+		}
+		// Approvers has a second mode, so an empty id gets its own message there.
+		if err := do("  "); KindOf(err) != KindInvalidInput || !strings.Contains(err.Error(), "certificateId: ") || !strings.Contains(err.Error(), "is required") {
+			t.Errorf("%s with an empty id: %v", name, err)
+		}
+	}
+	if n := len(f.requests()); n != 0 {
+		t.Fatalf("%d requests with an invalid certificate id were sent", n)
+	}
+
+	// A GUID passes in any case; surrounding space is trimmed before sending.
+	for name, do := range calls {
+		if err := do("\t3FA85F64-5717-4562-B3FC-2C963F66AFA6 \n"); err != nil {
+			t.Errorf("%s with an upper-case id: %v", name, err)
+		}
+	}
+	if n := len(f.requests()); n != len(calls) {
+		t.Fatalf("%d of %d valid requests were sent", n, len(calls))
+	}
+	for _, r := range f.requests() {
+		id := r.Query.Get("CertificateId")
+		if len(r.Body) > 0 {
+			id, _ = bodyOf(t, r).(map[string]any)["certificateId"].(string)
+		}
+		if id != "3FA85F64-5717-4562-B3FC-2C963F66AFA6" {
+			t.Errorf("%s %s sent certificate id %q", r.Method, r.Path, id)
+		}
 	}
 }
 

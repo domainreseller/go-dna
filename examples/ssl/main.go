@@ -1,9 +1,14 @@
-// SSL: generate a CSR, buy a certificate, configure it and wait until it is
-// issued. Buying charges the balance, so the program stops after listing
-// the packages unless you pass -package and -yes.
+// SSL: generate a CSR, buy or renew a certificate, configure it and wait
+// until it is issued. Buying and renewing charge the balance, so the program
+// stops after listing the packages and your certificates unless you pass
+// -yes with -package or -renew.
+//
+// An existing certificate is addressed by its certificate id, never by its
+// domain name: a domain can have several certificates.
 //
 //	go run ./examples/ssl -domain example.com
 //	go run ./examples/ssl -domain example.com -package PositiveSSL -approver admin@example.com -yes
+//	go run ./examples/ssl -renew 3fa85f64-5717-4562-b3fc-2c963f66afa6 -approver admin@example.com -yes
 package main
 
 import (
@@ -19,13 +24,11 @@ import (
 
 func main() {
 	domain := flag.String("domain", "", "domain of the certificate")
-	pkg := flag.String("package", "", "SSL package code (see the list)")
+	pkg := flag.String("package", "", "SSL package code to buy (see the list)")
+	renew := flag.String("renew", "", "id of the certificate to renew instead of buying one (see the list)")
 	approver := flag.String("approver", "", "approver e-mail address")
-	yes := flag.Bool("yes", false, "really buy (charges the balance)")
+	yes := flag.Bool("yes", false, "really buy or renew (charges the balance)")
 	flag.Parse()
-	if *domain == "" {
-		log.Fatal("-domain is required")
-	}
 
 	client, err := dna.NewClientFromEnv()
 	if err != nil {
@@ -33,7 +36,21 @@ func main() {
 	}
 	ctx := context.Background()
 
-	if *pkg == "" || !*yes {
+	if *renew != "" {
+		// The new CSR must carry the domain of the certificate being renewed.
+		old, err := client.SSL.Get(ctx, *renew)
+		if err != nil {
+			log.Fatal(err)
+		}
+		*domain = old.DomainName
+		fmt.Printf("certificate to renew: %s (%s); its subscription ends on %s\n",
+			old.DomainName, old.PackageCode, old.Subscription.ExpiresAt.Format(time.DateOnly))
+	}
+	if *domain == "" {
+		log.Fatal("-domain is required")
+	}
+
+	if (*pkg == "" && *renew == "") || !*yes {
 		products, err := client.Products.SSLs(ctx, dna.SSLProductListRequest{})
 		if err != nil {
 			log.Fatal(err)
@@ -45,7 +62,17 @@ func main() {
 			}
 			fmt.Printf("%-24s %-12s wildcard=%-5v %s\n", p.ProductCode, p.ValidationType, p.IsWildcard, price)
 		}
-		fmt.Println("pass -package CODE -approver MAIL -yes to buy one")
+
+		fmt.Println("\nyour certificates for", *domain+":")
+		for cert, err := range client.SSL.All(ctx, dna.SSLListRequest{DomainName: *domain}) {
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("%s %-22s %-16s subscription ends %s\n",
+				cert.CertificateID, cert.Status, cert.PackageCode, cert.SubscriptionExpiresAt.Format(time.DateOnly))
+		}
+		fmt.Println("\npass -package CODE -approver MAIL -yes to buy one,")
+		fmt.Println("or -renew CERTIFICATE_ID -approver MAIL -yes to renew one (from 30 days before its subscription ends)")
 		return
 	}
 
@@ -60,11 +87,23 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if _, err := client.SSL.Initialize(ctx, *domain, *pkg); err != nil {
+	// Buying and renewing both answer with the id of a new certificate that
+	// waits for configuration. A renewal is Renew + Configure; a second
+	// Initialize would be an unrelated purchase.
+	var order *dna.SSLOperationResult
+	if *renew != "" {
+		order, err = client.SSL.Renew(ctx, *renew)
+	} else {
+		order, err = client.SSL.Initialize(ctx, *domain, *pkg)
+	}
+	if err != nil {
 		log.Fatal(err)
 	}
+	id := order.CertificateID
+	fmt.Println("certificate id:", id, "(keep it: every later call takes it; configure within 15 days)")
+
 	if _, err := client.SSL.Configure(ctx, dna.SSLConfigureRequest{
-		DomainName: *domain, CSR: csr.CSR, PrivateKey: csr.PrivateKey,
+		CertificateID: id, CSR: csr.CSR, PrivateKey: csr.PrivateKey,
 		ApproverMail: *approver, AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache,
 		Contact: dna.SSLContact{
 			FirstName: "Ada", LastName: "Lovelace", CompanyName: "Example Ltd", Email: *approver,
@@ -76,7 +115,7 @@ func main() {
 	}
 
 	for {
-		st, err := client.SSL.Status(ctx, *domain)
+		st, err := client.SSL.Status(ctx, id)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -86,7 +125,7 @@ func main() {
 		}
 		time.Sleep(time.Minute)
 	}
-	cert, err := client.SSL.Content(ctx, *domain)
+	cert, err := client.SSL.Content(ctx, id)
 	if err != nil {
 		log.Fatal(err)
 	}

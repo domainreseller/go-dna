@@ -106,6 +106,16 @@ func TestAPIErrorDetails(t *testing.T) {
 	if !IsInsufficientBalance(fmt.Errorf("wrapped: %w", e)) {
 		t.Error("IsInsufficientBalance does not see the deposit code")
 	}
+
+	// A missing object: the hint names the list that shows what exists.
+	e = newAPIError("GET", "/api/v1/domains/info", 404, http.Header{}, nil)
+	if !strings.Contains(e.Hint(), "Domains.List") {
+		t.Errorf("domain 404: hint %q", e.Hint())
+	}
+	e = newAPIError("GET", "/api/v1/ssls/certificate", 404, http.Header{}, nil)
+	if !strings.Contains(e.Hint(), "certificate ID") || !strings.Contains(e.Hint(), "SSL.List") {
+		t.Errorf("certificate 404: hint %q", e.Hint())
+	}
 }
 
 func TestOutcomeUnknown(t *testing.T) {
