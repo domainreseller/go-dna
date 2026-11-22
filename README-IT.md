@@ -20,7 +20,7 @@ Client Go tipizzato per l'API REST per rivenditori di [Domain Name API](https://
 di domini, registrazione, rinnovo e trasferimento, DNS, DNSSEC, contatti, certificati SSL, hosting, ordini,
 catalogo prodotti e saldo.
 
-- **Tutte le 64 operazioni dell'API**, raggruppate come nella [CLI `dna`](https://github.com/domainreseller/cli):
+- **Tutte le 67 operazioni dell'API**, raggruppate come nella [CLI `dna`](https://github.com/domainreseller/cli):
   `dna domain info` corrisponde a `client.Domains.Info`, `dna dns add` a `client.DNS.Add`.
 - **Risultati ed enumerazioni tipizzati**: `d.Status == dna.DomainStatusPendingDelete`, `d.ExpirationDate.Before(...)`,
   senza `map[string]any`.
@@ -113,12 +113,12 @@ suggerimento; `client.Account.Get(ctx)` è il modo meno costoso per verificare.
 
 | Servizio          | Gruppo CLI    | Operazioni                                                                                                                                                        |
 |-------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `client.Account`  | `dna account` | `Get`, `Transactions`, `AllTransactions`                                                                                                                          |
+| `client.Account`  | `dna account` | `Get`, `Profile`, `Transactions`, `AllTransactions`                                                                                                               |
 | `client.Contacts` | `dna contact` | `Get`, `Create`, `Update`, `Verification`, `ResendVerification`                                                                                                   |
 | `client.Domains`  | `dna domain`  | `Search`, `BulkSearch`, `List`, `All`, `Info`, `Register`, `RegisterWithContacts`, `Renew`, `RenewCheck`, `Restore`, `Transfer`, `TransferCheck`, `TransferStatus`, `Lock`, `Unlock`, `SetPrivacy`, `UpdateAuthCode`, `SetNameServers`, `AddHost`, `UpdateHost`, `DeleteHost`, `UpdateContacts`, `SetContactHandles`, `Documents`, `UploadDocuments`, `Forwarding`, `SetForwarding`, `DeleteForwarding` |
 | `client.DNS`      | `dna dns`     | `List`, `Add`, `Update`, `Delete`, `Apply`                                                                                                                        |
 | `client.DNSSEC`   | `dna dnssec`  | `Get`, `Add`, `Remove`, `Disable`                                                                                                                                 |
-| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Approvers`, `Revoke`                                                |
+| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Renew`, `Approvers`, `Revoke`, `List`, `All`                        |
 | `client.Hosting`  | `dna hosting` | `Packages`, `Plans`, `Create`, `Wait`, `Get`, `GetByToken`, `Status`                                                                                              |
 | `client.Orders`   | `dna order`   | `Get`                                                                                                                                                             |
 | `client.Products` | `dna product` | `List`, `Info`, `TLDs`, `AllTLDs`, `TLD`, `SSLs`                                                                                                                  |
@@ -304,19 +304,55 @@ per file, 50 MB per richiesta) vengono verificati prima del caricamento.
 
 ### Certificati SSL
 
+Un dominio può avere più certificati, quindi un certificato esistente si indica con il suo **ID del
+certificato** (un GUID), mai con il nome di dominio. `Initialize` e `Renew` restituiscono l'ID (conservalo) e
+`SSL.List` lo trova a partire dal nome di dominio. Un nome di dominio passato al posto di un ID del certificato
+viene rifiutato con un `*dna.InputError` prima che venga inviato qualcosa.
+
 ```go
 csr, err := client.SSL.GenerateCSR(ctx, dna.SSLGenerateCSRRequest{
 	DomainName: "example.com", Country: "TR", State: "Istanbul", Locality: "Istanbul",
 	Organization: "Example Ltd", OrganizationUnit: "IT",
 })
-_, err = client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // addebita il saldo
-_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
-	DomainName: "example.com", CSR: csr.CSR, ApproverMail: "admin@example.com",
+order, err := client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // addebita il saldo
+id := order.CertificateID                                              // conservalo: ogni chiamata successiva lo richiede
+
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{ // entro 15 giorni
+	CertificateID: id, CSR: csr.CSR, ApproverMail: "admin@example.com",
 	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
 })
-st, err := client.SSL.Status(ctx, "example.com") // interroga finché st.IsIssued
-cert, err := client.SSL.Content(ctx, "example.com")
+st, err := client.SSL.Status(ctx, id) // interroga finché st.IsIssued
+cert, err := client.SSL.Content(ctx, id)
 os.WriteFile("example.com.crt", []byte(cert.Chain()), 0o644)
+```
+
+Un certificato non configurato entro 15 giorni da `Initialize` o `Renew` viene annullato.
+
+`SSL.List` restituisce i tuoi certificati, dal più recente (`SSL.All` li scorre tutti). `SSL.Approvers` elenca
+gli indirizzi accettati dalla validazione via e-mail, per un certificato esistente o prima di un acquisto:
+
+```go
+page, err := client.SSL.List(ctx, dna.SSLListRequest{DomainName: "example.com"})
+for _, c := range page.Items {
+	fmt.Println(c.CertificateID, c.Status, c.SubscriptionExpiresAt)
+}
+
+mails, err := client.SSL.Approvers(ctx, dna.SSLApproversRequest{CertificateID: id})
+mails, err = client.SSL.Approvers(ctx, dna.SSLApproversRequest{DomainName: "example.com", PackageCode: "PositiveSSL"})
+```
+
+Per rinnovare un certificato chiama `Renew` e poi configura con `Configure` il nuovo certificato restituito.
+`Renew` addebita il saldo ed è possibile a partire da 30 giorni prima della scadenza dell'abbonamento. Non
+rinnovare con un secondo `Initialize`: è un acquisto separato, al prezzo di acquisto, e il vecchio certificato non
+passa mai allo stato `Renewed`.
+
+```go
+renewal, err := client.SSL.Renew(ctx, id) // addebita il saldo
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
+	CertificateID: renewal.CertificateID, // il nuovo certificato; il vecchio mantiene il proprio ID
+	CSR: newCSR.CSR, ApproverMail: "admin@example.com",
+	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
+})
 ```
 
 ### Hosting
@@ -339,6 +375,7 @@ volte.
 ```go
 account, err := client.Account.Get(ctx)
 usd, _ := account.Balance("USD")
+profile, err := client.Account.Profile(ctx) // profile.Name, profile.AccountCurrency, profile.Status
 
 for tx, err := range client.Account.AllTransactions(ctx, dna.AccountTransactionsRequest{From: monthStart}) {
 	if err != nil {

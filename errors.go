@@ -203,6 +203,9 @@ func (e *APIError) Hint() string {
 	}
 	switch e.Kind() {
 	case KindNotFound:
+		if strings.HasPrefix(e.Path, "/api/v1/ssls") {
+			return "Check the certificate ID and the environment: production and OTE hold different certificates. SSL.List shows the certificates this account holds."
+		}
 		return "Check the spelling and the environment: production and OTE hold different domains. Domains.List shows what this account holds."
 	case KindServer:
 		if e.CorrelationID != "" {

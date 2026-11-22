@@ -3,6 +3,7 @@ package dna
 import (
 	"net/url"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -148,6 +149,9 @@ func (o object) set(key string, v any) object {
 // domainBody is the body of the many requests that only name a domain.
 func domainBody(name string) object { return object{"domainName": trim(name)} }
 
+// certificateBody is the body of the requests that name an SSL certificate.
+func certificateBody(id string) object { return object{"certificateId": trim(id)} }
+
 // params builds a query string, skipping empty values so the API sees only
 // what the caller set.
 type params struct{ url.Values }
@@ -258,6 +262,29 @@ func (v *validator) maxLen(field, value string, max int) {
 	if len([]rune(value)) > max {
 		v.add(field, "must be at most "+strconv.Itoa(max)+" characters")
 	}
+}
+
+// certificateIDPattern is a GUID: 8-4-4-4-12 hexadecimal digits.
+var certificateIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`)
+
+// certificateID checks the id of an SSL certificate. The API used to address
+// certificates by domain name, and both are strings, so a domain name passed
+// by an old caller is caught here instead of reaching the API.
+func (v *validator) certificateID(field, value string) {
+	switch value = strings.TrimSpace(value); {
+	case value == "":
+		v.add(field, "is required: pass the CertificateID returned by SSL.Initialize or SSL.Renew, or look it up with SSL.List")
+	case !certificateIDPattern.MatchString(value):
+		v.add(field, "must be a certificate id (GUID). Certificates are no longer addressed by domain name: "+
+			"use the CertificateID returned by SSL.Initialize or SSL.Renew, or look it up with SSL.List(ctx, SSLListRequest{DomainName: domainName})")
+	}
+}
+
+// requireCertificateID validates a request whose only input is a certificate id.
+func requireCertificateID(id string) error {
+	var v validator
+	v.certificateID("certificateId", id)
+	return v.err()
 }
 
 func (v *validator) err() error {

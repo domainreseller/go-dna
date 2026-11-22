@@ -28,7 +28,7 @@
 // add`, and so on. Methods return typed results; enums such as DomainStatus
 // have names (DomainStatusPendingDelete) and String methods; list
 // endpoints have iterators (Domains.All, Account.AllTransactions,
-// Products.AllTLDs) that fetch pages for you.
+// Products.AllTLDs, SSL.All) that fetch pages for you.
 //
 // # Requests
 //

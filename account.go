@@ -11,9 +11,29 @@ import (
 	"time"
 )
 
-// AccountService is the reseller account: balances and the balance ledger.
-// CLI: dna account ...
+// AccountService is the reseller account: balances, the balance ledger and
+// the reseller's profile. CLI: dna account ...
 type AccountService service
+
+// AccountProfile is the profile of the reseller the credentials belong to.
+type AccountProfile struct {
+	// ID is the reseller ID (a UUID), the one NewClient takes.
+	ID string `json:"id"`
+	// ResellerAutoID is the reseller's numeric ID.
+	ResellerAutoID    int    `json:"resellerAutoId"`
+	Name              string `json:"name"`
+	CompanyName       string `json:"companyName"`
+	ResellerGroupName string `json:"resellerGroupName"`
+	// AccountCurrency is the currency the account is kept in.
+	AccountCurrency AccountCurrency `json:"accountCurrency"`
+	Status          ResellerStatus  `json:"status"`
+	IsSubReseller   bool            `json:"isSubReseller"`
+	// IsBalanceSuspended reports a suspended balance: the API refuses
+	// billable operations while it is set.
+	IsBalanceSuspended bool `json:"isBalanceSuspended"`
+	// IsMCPEnabled reports whether MCP access is enabled for the reseller.
+	IsMCPEnabled bool `json:"isMcpEnabled"`
+}
 
 // Account is the reseller account and its balances.
 type Account struct {
@@ -69,6 +89,14 @@ type AccountGetRequest struct{ BaseRequest }
 
 func (AccountGetRequest) Endpoint() Endpoint {
 	return Endpoint{Method: http.MethodGet, Path: "/api/v1/deposit/accounts/me", Safety: Read}
+}
+
+// AccountProfileRequest reads the reseller's profile.
+// CLI: dna account profile
+type AccountProfileRequest struct{ BaseRequest }
+
+func (AccountProfileRequest) Endpoint() Endpoint {
+	return Endpoint{Method: http.MethodGet, Path: "/api/v1/resellers/me", Safety: Read}
 }
 
 // AccountTransactionsRequest lists balance transactions.
@@ -127,6 +155,12 @@ func (r AccountTransactionsRequest) Validate() error {
 // cheapest way to check that the credentials work.
 func (s *AccountService) Get(ctx context.Context) (*Account, error) {
 	return call[Account](ctx, s.client, AccountGetRequest{})
+}
+
+// Profile returns the profile of the reseller the credentials belong to:
+// names, reseller group, account currency and status.
+func (s *AccountService) Profile(ctx context.Context) (*AccountProfile, error) {
+	return call[AccountProfile](ctx, s.client, AccountProfileRequest{})
 }
 
 // Transactions returns one page of the balance ledger.

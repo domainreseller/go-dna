@@ -15,6 +15,7 @@ func TestEveryServiceMethod(t *testing.T) {
 		call         func(c *Client) error
 	}{
 		{"GET", "/api/v1/deposit/accounts/me", func(c *Client) error { _, err := c.Account.Get(ctx); return err }},
+		{"GET", "/api/v1/resellers/me", func(c *Client) error { _, err := c.Account.Profile(ctx); return err }},
 		{"GET", "/api/v1/deposit/transactions", func(c *Client) error {
 			_, err := c.Account.Transactions(ctx, AccountTransactionsRequest{})
 			return err
@@ -96,18 +97,23 @@ func TestEveryServiceMethod(t *testing.T) {
 		{"POST", "/api/v1/ssls/check-csr", func(c *Client) error { _, err := c.SSL.CheckCSR(ctx, "csr"); return err }},
 		{"POST", "/api/v1/ssls/initialize", func(c *Client) error { _, err := c.SSL.Initialize(ctx, "a.com", "P"); return err }},
 		{"PUT", "/api/v1/ssls/configure", func(c *Client) error {
-			_, err := c.SSL.Configure(ctx, SSLConfigureRequest{DomainName: "a.com", CSR: "csr", Contact: sampleSSLContact()})
+			_, err := c.SSL.Configure(ctx, SSLConfigureRequest{CertificateID: testCertificateID, CSR: "csr", Contact: sampleSSLContact()})
 			return err
 		}},
-		{"PUT", "/api/v1/ssls/check-status", func(c *Client) error { _, err := c.SSL.Status(ctx, "a.com"); return err }},
-		{"GET", "/api/v1/ssls/certificate", func(c *Client) error { _, err := c.SSL.Get(ctx, "a.com"); return err }},
-		{"GET", "/api/v1/ssls/certificate-content", func(c *Client) error { _, err := c.SSL.Content(ctx, "a.com"); return err }},
+		{"PUT", "/api/v1/ssls/check-status", func(c *Client) error { _, err := c.SSL.Status(ctx, testCertificateID); return err }},
+		{"GET", "/api/v1/ssls/certificate", func(c *Client) error { _, err := c.SSL.Get(ctx, testCertificateID); return err }},
+		{"GET", "/api/v1/ssls/certificate-content", func(c *Client) error { _, err := c.SSL.Content(ctx, testCertificateID); return err }},
 		{"POST", "/api/v1/ssls/reissue", func(c *Client) error {
-			_, err := c.SSL.Reissue(ctx, SSLReissueRequest{DomainName: "a.com"})
+			_, err := c.SSL.Reissue(ctx, SSLReissueRequest{CertificateID: testCertificateID})
 			return err
 		}},
-		{"GET", "/api/v1/ssls/approvers", func(c *Client) error { _, err := c.SSL.Approvers(ctx, "a.com", "P"); return err }},
-		{"DELETE", "/api/v1/ssls/revoke", func(c *Client) error { _, err := c.SSL.Revoke(ctx, "a.com"); return err }},
+		{"GET", "/api/v1/ssls/approvers", func(c *Client) error {
+			_, err := c.SSL.Approvers(ctx, SSLApproversRequest{DomainName: "a.com", PackageCode: "P"})
+			return err
+		}},
+		{"DELETE", "/api/v1/ssls/revoke", func(c *Client) error { _, err := c.SSL.Revoke(ctx, testCertificateID); return err }},
+		{"POST", "/api/v1/ssls/renew", func(c *Client) error { _, err := c.SSL.Renew(ctx, testCertificateID); return err }},
+		{"GET", "/api/v1/ssls", func(c *Client) error { _, err := c.SSL.List(ctx, SSLListRequest{}); return err }},
 		{"GET", "/api/v1/hostings/packages", func(c *Client) error { _, err := c.Hosting.Packages(ctx); return err }},
 		{"GET", "/api/v1/hostings/plans", func(c *Client) error { _, err := c.Hosting.Plans(ctx, "h"); return err }},
 		{"POST", "/api/v1/hostings/create", func(c *Client) error { _, err := c.Hosting.Create(ctx, "a.com", "plan"); return err }},

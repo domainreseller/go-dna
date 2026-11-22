@@ -20,7 +20,7 @@
 kayıt, yenileme ve transfer, DNS, DNSSEC, iletişim kayıtları, SSL sertifikaları, hosting, siparişler, ürün
 kataloğu ve bakiyeniz.
 
-- **API'nin 64 işleminin tamamı**, [`dna` CLI](https://github.com/domainreseller/cli) ile aynı şekilde gruplanmıştır:
+- **API'nin 67 işleminin tamamı**, [`dna` CLI](https://github.com/domainreseller/cli) ile aynı şekilde gruplanmıştır:
   `dna domain info` komutu `client.Domains.Info`, `dna dns add` komutu `client.DNS.Add` karşılığıdır.
 - **Tip güvenli sonuçlar ve enum'lar**: `d.Status == dna.DomainStatusPendingDelete`, `d.ExpirationDate.Before(...)`,
   `map[string]any` yok.
@@ -112,12 +112,12 @@ kontrol etmenin en ucuz yolu `client.Account.Get(ctx)` çağrısıdır.
 
 | Servis            | CLI grubu     | İşlemler                                                                                                                                                          |
 |-------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `client.Account`  | `dna account` | `Get`, `Transactions`, `AllTransactions`                                                                                                                          |
+| `client.Account`  | `dna account` | `Get`, `Profile`, `Transactions`, `AllTransactions`                                                                                                               |
 | `client.Contacts` | `dna contact` | `Get`, `Create`, `Update`, `Verification`, `ResendVerification`                                                                                                   |
 | `client.Domains`  | `dna domain`  | `Search`, `BulkSearch`, `List`, `All`, `Info`, `Register`, `RegisterWithContacts`, `Renew`, `RenewCheck`, `Restore`, `Transfer`, `TransferCheck`, `TransferStatus`, `Lock`, `Unlock`, `SetPrivacy`, `UpdateAuthCode`, `SetNameServers`, `AddHost`, `UpdateHost`, `DeleteHost`, `UpdateContacts`, `SetContactHandles`, `Documents`, `UploadDocuments`, `Forwarding`, `SetForwarding`, `DeleteForwarding` |
 | `client.DNS`      | `dna dns`     | `List`, `Add`, `Update`, `Delete`, `Apply`                                                                                                                        |
 | `client.DNSSEC`   | `dna dnssec`  | `Get`, `Add`, `Remove`, `Disable`                                                                                                                                 |
-| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Approvers`, `Revoke`                                                |
+| `client.SSL`      | `dna ssl`     | `GenerateCSR`, `CheckCSR`, `Initialize`, `Configure`, `Status`, `Get`, `Content`, `Reissue`, `Renew`, `Approvers`, `Revoke`, `List`, `All`                        |
 | `client.Hosting`  | `dna hosting` | `Packages`, `Plans`, `Create`, `Wait`, `Get`, `GetByToken`, `Status`                                                                                              |
 | `client.Orders`   | `dna order`   | `Get`                                                                                                                                                             |
 | `client.Products` | `dna product` | `List`, `Info`, `TLDs`, `AllTLDs`, `TLD`, `SSLs`                                                                                                                  |
@@ -302,19 +302,56 @@ istek başına 50 MB) yüklemeden önce kontrol edilir.
 
 ### SSL sertifikaları
 
+Bir alan adının birden fazla sertifikası olabilir; bu yüzden mevcut bir sertifika alan adıyla değil,
+**sertifika kimliğiyle** (bir GUID) adreslenir. `Initialize` ve `Renew` bu kimliği döndürür (saklayın), `SSL.List`
+ise onu alan adına göre bulur. Sertifika kimliği beklenen yere alan adı verilirse istek, hiçbir şey gönderilmeden
+önce `*dna.InputError` ile reddedilir.
+
 ```go
 csr, err := client.SSL.GenerateCSR(ctx, dna.SSLGenerateCSRRequest{
 	DomainName: "example.com", Country: "TR", State: "Istanbul", Locality: "Istanbul",
 	Organization: "Example Ltd", OrganizationUnit: "IT",
 })
-_, err = client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // bakiyeden ücret keser
-_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
-	DomainName: "example.com", CSR: csr.CSR, ApproverMail: "admin@example.com",
+order, err := client.SSL.Initialize(ctx, "example.com", "PositiveSSL") // bakiyeden ücret keser
+id := order.CertificateID                                              // saklayın: sonraki her çağrı bunu alır
+
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{ // 15 gün içinde
+	CertificateID: id, CSR: csr.CSR, ApproverMail: "admin@example.com",
 	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
 })
-st, err := client.SSL.Status(ctx, "example.com") // st.IsIssued olana kadar sorgulayın
-cert, err := client.SSL.Content(ctx, "example.com")
+st, err := client.SSL.Status(ctx, id) // st.IsIssued olana kadar sorgulayın
+cert, err := client.SSL.Content(ctx, id)
 os.WriteFile("example.com.crt", []byte(cert.Chain()), 0o644)
+```
+
+`Initialize` veya `Renew` sonrasında 15 gün içinde yapılandırılmayan sertifika iptal edilir.
+
+`SSL.List` sertifikalarınızı en yeniden eskiye doğru döndürür (`SSL.All` hepsinin üzerinde dolaşır).
+`SSL.Approvers`, mevcut bir sertifika için veya satın almadan önce, e-posta doğrulamasının kabul ettiği adresleri
+listeler:
+
+```go
+page, err := client.SSL.List(ctx, dna.SSLListRequest{DomainName: "example.com"})
+for _, c := range page.Items {
+	fmt.Println(c.CertificateID, c.Status, c.SubscriptionExpiresAt)
+}
+
+mails, err := client.SSL.Approvers(ctx, dna.SSLApproversRequest{CertificateID: id})
+mails, err = client.SSL.Approvers(ctx, dna.SSLApproversRequest{DomainName: "example.com", PackageCode: "PositiveSSL"})
+```
+
+Bir sertifikayı yenilemek için `Renew` işlevini çağırın, ardından döndürdüğü yeni sertifikayı `Configure` ile
+yapılandırın. `Renew` bakiyeden ücret keser ve abonelik bitimine en fazla 30 gün kala yapılabilir. İkinci bir
+`Initialize` ile yenilemeyin: bu, satın alma fiyatı üzerinden ilgisiz yeni bir satın almadır ve eski sertifika hiçbir zaman
+`Renewed` durumuna geçmez.
+
+```go
+renewal, err := client.SSL.Renew(ctx, id) // bakiyeden ücret keser
+_, err = client.SSL.Configure(ctx, dna.SSLConfigureRequest{
+	CertificateID: renewal.CertificateID, // yeni sertifika; eskisi kendi kimliğini korur
+	CSR: newCSR.CSR, ApproverMail: "admin@example.com",
+	AuthenticationType: dna.AuthenticationEmail, WebServerType: dna.WebServerApache, Contact: sslContact,
+})
 ```
 
 ### Hosting
@@ -336,6 +373,7 @@ Hâlâ hazırlanmakta olan bir hosting için `Create` işlevini bir daha çağı
 ```go
 account, err := client.Account.Get(ctx)
 usd, _ := account.Balance("USD")
+profile, err := client.Account.Profile(ctx) // profile.Name, profile.AccountCurrency, profile.Status
 
 for tx, err := range client.Account.AllTransactions(ctx, dna.AccountTransactionsRequest{From: monthStart}) {
 	if err != nil {

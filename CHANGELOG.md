@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+**Breaking, and forced by the API.** On 2026-11-20 the API changed its SSL endpoints: a domain can now have
+several certificates, so an existing certificate is addressed by its `certificateId` (a GUID) and no longer by
+its domain name. The API rejects the old requests, so the SSL calls of 2.0.0 that name a domain no longer work
+in production or OTE. What you must change is listed under "Changed".
+
+### Changed
+
+- **Breaking:** `SSL.Status`, `SSL.Get`, `SSL.Content` and `SSL.Revoke` take the certificate ID instead of the
+  domain name. Keep the `CertificateID` that `SSL.Initialize` returns and pass it to the later calls. For
+  certificates you already have, look the ID up with
+  `SSL.List(ctx, dna.SSLListRequest{DomainName: "example.com"})`.
+- **Breaking:** `SSLConfigureRequest`, `SSLReissueRequest`, `SSLStatusRequest`, `SSLGetRequest`,
+  `SSLContentRequest` and `SSLRevokeRequest` have a `CertificateID` field in place of `DomainName`. The CSR
+  given to `SSL.Configure` must carry the domain of the certificate.
+- **Breaking:** `SSL.Approvers(ctx, domainName, packageCode)` is now
+  `SSL.Approvers(ctx, dna.SSLApproversRequest{...})`. Set `CertificateID` for an existing certificate, or
+  `DomainName` and `PackageCode` before a purchase; with a domain name the package code is no longer optional.
+- A domain name passed where a certificate ID belongs fails with an `*InputError` before anything is sent. Both
+  are strings, so the compiler cannot catch `SSL.Status(ctx, "example.com")`; the error says to use the ID from
+  `SSL.Initialize` or `SSL.Renew`, or to look it up with `SSL.List`.
+- A certificate must now be configured within 15 days of `SSL.Initialize` or `SSL.Renew` (the API's window was
+  7 days), and a renewal is `SSL.Renew` followed by `SSL.Configure`. Do not renew with a second
+  `SSL.Initialize`: that is an unrelated purchase at the purchase price, and the old certificate never becomes
+  `Renewed`.
+- `APIError.Hint` for a certificate that is not found points to `SSL.List` instead of `Domains.List`.
+- `testdata/openapi.json` is the API's current OpenAPI document (67 operations).
+
+### Added
+
+- `SSL.Renew(ctx, certificateID)` and `SSLRenewRequest`: renews a certificate. It charges the balance, so it is
+  a `Billable` request: never retried after a network error and blocked by `WithReadOnly`. The result carries
+  the ID of the new certificate, which you then configure.
+- `SSL.List`, the iterator `SSL.All`, `SSLListRequest` and `CertificateListItem`: your certificates, newest
+  first, optionally of one domain.
+- `CertificateID` on `Certificate`, `CertificateStatus` and `CertificateContent`.
+- `Account.Profile`, `AccountProfileRequest` and `AccountProfile`: the reseller's profile, with the new enums
+  `AccountCurrency` and `ResellerStatus`.
+
 ## [2.0.0] - 2026-11-19
 
 A new SDK, designed for Go and for the REST API instead of ported from php-dna. The module path is now
