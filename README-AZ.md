@@ -99,6 +99,8 @@ client, err := dna.NewClient(resellerID, apiKey)
 | `DNA_ENV`         | `production` (susmaya görə) və ya `ote`                       |
 | `DNA_TEST_MODE`   | `true` OTE-ni seçir (digər DomainNameAPI SDK-larındakı kimi)  |
 | `DNA_BASE_URL`    | xüsusi baza URL, məsələn proksi                               |
+| `DNA_APP`         | SDK-dan istifadə edən tətbiq, `X-App` kimi göndərilir         |
+| `DNA_APP_VERSION` | həmin tətbiqin versiyası, `X-Version` kimi göndərilir         |
 
 ```go
 client, err := dna.NewClientFromEnv(dna.WithUserAgent("my-panel/1.4"))
@@ -520,12 +522,27 @@ Dəstək xidmətinə müraciət edərkən `CorrelationID` dəyərini qeyd edin.
 | `WithHTTPClient(hc)`            | öz `*http.Client`-iniz (transport, proksi, TLS); yönləndirmələr heç vaxt izlənmir        |
 | `WithTimeout(d)`                | cəhd başına vaxt aşımı (susmaya görə 60 san)                                             |
 | `WithUserAgent("app/1.0")`      | məhsulunuzu User-Agent-in əvvəlinə əlavə edir                                            |
+| `WithApp("wisecp", "2.0.20")`   | tətbiqinizi və versiyasını bildirir (`X-App`, `X-Version`)                               |
 | `WithCurrency("TRY")`           | axtarış və kataloq qiymətlərinin valyutası                                               |
 | `WithRetries(n)`                | təkrar cəhd sayı (susmaya görə 2)                                                        |
 | `WithPacing(false)`             | klient tərəfi sürət tənzimini söndürür                                                   |
 | `WithReadOnly()`                | oxuma olmayan hər sorğunu bloklayır                                                      |
 | `WithLogger(l)`                 | mübadilələri `*slog.Logger`-ə loglayır                                                   |
 | `WithTrace(fn)`                 | hər sorğunu, cavabı və təkrar cəhdi müşahidə edir                                        |
+
+### Tətbiqinizin tanıdılması
+
+Hər sorğu DomainNameAPI-yə onu hansı inteqrasiyanın göndərdiyini bildirən `X-App` və `X-Version` başlıqlarını
+daşıyır. Standart dəyərlər `go` və SDK versiyasıdır. Öz tətbiqinizi `WithApp` ilə (`NewClientFromEnv` istifadə
+edirsinizsə, `DNA_APP` və `DNA_APP_VERSION` ilə) bildirin:
+
+```go
+client, err := dna.NewClient(resellerID, apiKey, dna.WithApp("WiseCP", "V2.0.20-beta"))
+// X-App: wisecp, X-Version: 2.0.20
+```
+
+Ad kiçik hərflərə çevrilir və yalnız `a-z`, `0-9`, `.`, `_` və `-` simvolları saxlanılır; versiyada yalnız rəqəmlər və
+nöqtələr qalır. Boş və ya etibarsız ad `go` dəyərinə, boş versiya SDK versiyasına qayıdır. User-Agent dəyişmir.
 
 ## Kodunuzun test edilməsi
 

@@ -58,10 +58,16 @@ func ParseEnvironment(s string) (Environment, error) {
 const (
 	EnvResellerID = "DNA_RESELLER_ID"
 	EnvAPIKey     = "DNA_API_KEY"
-	EnvEnv        = "DNA_ENV"       // "production" or "ote"
-	EnvTestMode   = "DNA_TEST_MODE" // "true" selects OTE
-	EnvBaseURL    = "DNA_BASE_URL"  // overrides the environment's URL
+	EnvEnv        = "DNA_ENV"         // "production" or "ote"
+	EnvTestMode   = "DNA_TEST_MODE"   // "true" selects OTE
+	EnvBaseURL    = "DNA_BASE_URL"    // overrides the environment's URL
+	EnvApp        = "DNA_APP"         // the application using the SDK, sent as X-App
+	EnvAppVersion = "DNA_APP_VERSION" // that application's version, sent as X-Version
 )
+
+// DefaultApp is the X-App header sent when no application is set with
+// WithApp.
+const DefaultApp = "go"
 
 // Client talks to the DomainNameAPI REST API. The services (Domains, DNS,
 // SSL, ...) group the operations the same way the dna CLI groups its
@@ -94,6 +100,8 @@ type Client struct {
 	apiKey     string
 	httpClient *http.Client
 	userAgent  string
+	app        string
+	appVersion string
 	currency   string
 	maxRetries int
 	maxWait    time.Duration
@@ -160,6 +168,54 @@ func WithUserAgent(product string) Option {
 		}
 		return nil
 	}
+}
+
+// WithApp names the application that uses the SDK and its version, e.g.
+// WithApp("WiseCP", "V2.0.20"). Every request then carries the headers
+// X-App (the name in lower case, keeping only a-z, 0-9, ".", "_" and "-")
+// and X-Version (digits and dots only, so "V2.0.20-beta" is sent as
+// "2.0.20"). They tell DomainNameAPI which integration made a request.
+// Without this option the SDK sends X-App: go and its own version; an empty
+// or invalid name falls back to "go" and an empty version to the SDK's.
+func WithApp(name, version string) Option {
+	return func(c *Client) error {
+		c.app = normalizeApp(name)
+		c.appVersion = normalizeAppVersion(version)
+		return nil
+	}
+}
+
+// normalizeApp lower-cases name and keeps only [a-z0-9._-]; it returns
+// DefaultApp when nothing is left.
+func normalizeApp(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
+			return r
+		}
+		return -1
+	}, strings.ToLower(name))
+	if name == "" {
+		return DefaultApp
+	}
+	return name
+}
+
+// normalizeAppVersion keeps only digits and dots and trims surrounding dots;
+// it returns the SDK's Version when nothing is left.
+func normalizeAppVersion(version string) string {
+	if v := cleanVersion(version); v != "" {
+		return v
+	}
+	return cleanVersion(Version)
+}
+
+func cleanVersion(version string) string {
+	return strings.Trim(strings.Map(func(r rune) rune {
+		if (r >= '0' && r <= '9') || r == '.' {
+			return r
+		}
+		return -1
+	}, version), ".")
 }
 
 // WithCurrency sets the currency ("USD", "TRY", ...) of the prices returned
@@ -264,6 +320,8 @@ func NewClient(resellerID, apiKey string, opts ...Option) (*Client, error) {
 		apiKey:     strings.TrimSpace(apiKey),
 		httpClient: &http.Client{Timeout: 60 * time.Second, CheckRedirect: noRedirect},
 		userAgent:  UserAgent,
+		app:        DefaultApp,
+		appVersion: normalizeAppVersion(""),
 		maxRetries: 2,
 		maxWait:    30 * time.Second,
 		pacer:      newPacer(),
@@ -296,8 +354,9 @@ func NewClient(resellerID, apiKey string, opts ...Option) (*Client, error) {
 
 // NewClientFromEnv creates a client from the environment variables the dna
 // CLI uses: DNA_RESELLER_ID, DNA_API_KEY, DNA_ENV ("production" or "ote"; or
-// DNA_TEST_MODE=true) and DNA_BASE_URL. Options passed here win over the
-// environment.
+// DNA_TEST_MODE=true) and DNA_BASE_URL. DNA_APP and DNA_APP_VERSION set the
+// X-App and X-Version headers as WithApp does. Options passed here win over
+// the environment.
 func NewClientFromEnv(opts ...Option) (*Client, error) {
 	var envOpts []Option
 	mode := os.Getenv(EnvEnv)
@@ -311,6 +370,9 @@ func NewClientFromEnv(opts ...Option) (*Client, error) {
 	envOpts = append(envOpts, WithEnvironment(env))
 	if u := strings.TrimSpace(os.Getenv(EnvBaseURL)); u != "" {
 		envOpts = append(envOpts, WithBaseURL(u))
+	}
+	if app, ver := os.Getenv(EnvApp), os.Getenv(EnvAppVersion); app != "" || ver != "" {
+		envOpts = append(envOpts, WithApp(app, ver))
 	}
 	resellerID, apiKey := os.Getenv(EnvResellerID), os.Getenv(EnvAPIKey)
 	if strings.TrimSpace(resellerID) == "" || strings.TrimSpace(apiKey) == "" {

@@ -99,6 +99,8 @@ client, err := dna.NewClient(resellerID, apiKey)
 | `DNA_ENV`         | `production`（默认）或 `ote`                                  |
 | `DNA_TEST_MODE`   | `true` 选择 OTE（与其他 DomainNameAPI SDK 一致）              |
 | `DNA_BASE_URL`    | 自定义基础 URL，例如代理                                      |
+| `DNA_APP`         | 使用 SDK 的应用，作为 `X-App` 发送                            |
+| `DNA_APP_VERSION` | 该应用的版本，作为 `X-Version` 发送                            |
 
 ```go
 client, err := dna.NewClientFromEnv(dna.WithUserAgent("my-panel/1.4"))
@@ -513,12 +515,26 @@ case errors.As(err, &apiErr):
 | `WithHTTPClient(hc)`            | 使用你自己的 `*http.Client`（传输层、代理、TLS）；绝不会跟随重定向                       |
 | `WithTimeout(d)`                | 每次尝试的超时时间（默认 60 s）                                                          |
 | `WithUserAgent("app/1.0")`      | 将你的产品名放在 User-Agent 前面                                                         |
+| `WithApp("wisecp", "2.0.20")`   | 声明你的应用及其版本（`X-App`、`X-Version`）                                                |
 | `WithCurrency("TRY")`           | 搜索价格与目录价格的币种                                                                 |
 | `WithRetries(n)`                | 重试次数（默认 2）                                                                       |
 | `WithPacing(false)`             | 关闭客户端节奏控制                                                                       |
 | `WithReadOnly()`                | 阻止所有非读取请求                                                                       |
 | `WithLogger(l)`                 | 将交互记录到 `*slog.Logger`                                                              |
 | `WithTrace(fn)`                 | 观察每个请求、响应和重试                                                                 |
+
+### 标识你的应用
+
+每个请求都带有 `X-App` 和 `X-Version` 请求头，告诉 DomainNameAPI 是哪个集成发送的请求。默认值为 `go` 和 SDK
+版本。用 `WithApp` 声明你自己的应用（使用 `NewClientFromEnv` 时也可以用 `DNA_APP` 和 `DNA_APP_VERSION`）：
+
+```go
+client, err := dna.NewClient(resellerID, apiKey, dna.WithApp("WiseCP", "V2.0.20-beta"))
+// X-App: wisecp, X-Version: 2.0.20
+```
+
+名称会转为小写，只保留 `a-z`、`0-9`、`.`、`_` 和 `-`；版本只保留数字和点。名称为空或无效时回退为 `go`，版本为空时
+回退为 SDK 版本。User-Agent 不受影响。
 
 ## 测试你的代码
 

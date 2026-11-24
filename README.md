@@ -99,6 +99,8 @@ client, err := dna.NewClient(resellerID, apiKey)
 | `DNA_ENV`         | `production` (default) or `ote`                               |
 | `DNA_TEST_MODE`   | `true` selects OTE (as in the other DomainNameAPI SDKs)       |
 | `DNA_BASE_URL`    | a custom base URL, e.g. a proxy                               |
+| `DNA_APP`         | the application using the SDK, sent as `X-App`                |
+| `DNA_APP_VERSION` | that application's version, sent as `X-Version`               |
 
 ```go
 client, err := dna.NewClientFromEnv(dna.WithUserAgent("my-panel/1.4"))
@@ -514,12 +516,27 @@ Quote the `CorrelationID` when contacting support.
 | `WithHTTPClient(hc)`            | your own `*http.Client` (transport, proxy, TLS); redirects are never followed            |
 | `WithTimeout(d)`                | per-attempt timeout (default 60 s)                                                       |
 | `WithUserAgent("app/1.0")`      | put your product in front of the User-Agent                                              |
+| `WithApp("wisecp", "2.0.20")`   | name your application and its version (`X-App`, `X-Version`)                             |
 | `WithCurrency("TRY")`           | currency of search and catalogue prices                                                  |
 | `WithRetries(n)`                | retry count (default 2)                                                                  |
 | `WithPacing(false)`             | turn client-side pacing off                                                              |
 | `WithReadOnly()`                | block every non-read request                                                             |
 | `WithLogger(l)`                 | log exchanges to a `*slog.Logger`                                                        |
 | `WithTrace(fn)`                 | observe every request, response and retry                                                |
+
+### Identifying your application
+
+Every request carries an `X-App` and an `X-Version` header that tell DomainNameAPI which integration sent it.
+By default they are `go` and the SDK version. Name your own application with `WithApp` (or with `DNA_APP` and
+`DNA_APP_VERSION` when you use `NewClientFromEnv`):
+
+```go
+client, err := dna.NewClient(resellerID, apiKey, dna.WithApp("WiseCP", "V2.0.20-beta"))
+// X-App: wisecp, X-Version: 2.0.20
+```
+
+The name is lower-cased and keeps only `a-z`, `0-9`, `.`, `_` and `-`; the version keeps only digits and dots.
+An empty or invalid name falls back to `go`, an empty version to the SDK version. The User-Agent does not change.
 
 ## Testing your code
 

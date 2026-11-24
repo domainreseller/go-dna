@@ -186,6 +186,8 @@ func (c *Client) newHTTPRequest(ctx context.Context, ep Endpoint, r Request, bod
 	req.Header.Set("X-API-KEY", c.apiKey)
 	req.Header["__reseller"] = []string{c.resellerID} // non-canonical name, sent verbatim
 	req.Header.Set("X-Correlation-ID", corrID)
+	req.Header.Set("X-App", c.app)
+	req.Header.Set("X-Version", c.appVersion)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

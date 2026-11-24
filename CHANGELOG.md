@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Every request carries the headers `X-App` and `X-Version`, which tell DomainNameAPI which integration sent it.
+  They default to `go` and the SDK version. `WithApp(name, version)` names your application instead, and
+  `NewClientFromEnv` reads `DNA_APP` and `DNA_APP_VERSION`. The name is lower-cased and keeps only `a-z`, `0-9`,
+  `.`, `_` and `-` (an empty or invalid name falls back to `go`); the version keeps only digits and dots, so
+  `V2.0.20-beta` is sent as `2.0.20` (an empty version falls back to the SDK version). The User-Agent is unchanged.
+
 ## [2.1.0] - 2026-11-22
 
 **Breaking, and forced by the API.** On 2026-11-20 the API changed its SSL endpoints: a domain can now have

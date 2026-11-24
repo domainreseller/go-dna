@@ -100,6 +100,8 @@ client, err := dna.NewClient(resellerID, apiKey)
 | `DNA_ENV`         | `production` (varsayılan) veya `ote`                          |
 | `DNA_TEST_MODE`   | `true` OTE'yi seçer (diğer DomainNameAPI SDK'larındaki gibi)  |
 | `DNA_BASE_URL`    | özel bir temel URL, ör. bir proxy                             |
+| `DNA_APP`         | SDK'yı kullanan uygulama, `X-App` olarak gönderilir           |
+| `DNA_APP_VERSION` | o uygulamanın sürümü, `X-Version` olarak gönderilir           |
 
 ```go
 client, err := dna.NewClientFromEnv(dna.WithUserAgent("my-panel/1.4"))
@@ -522,12 +524,27 @@ Destekle iletişime geçerken `CorrelationID` değerini belirtin.
 | `WithHTTPClient(hc)`            | kendi `*http.Client`'ınız (transport, proxy, TLS); yönlendirmeler asla izlenmez          |
 | `WithTimeout(d)`                | deneme başına zaman aşımı (varsayılan 60 sn)                                             |
 | `WithUserAgent("app/1.0")`      | ürününüzü User-Agent'ın başına ekler                                                     |
+| `WithApp("wisecp", "2.0.20")`   | uygulamanızı ve sürümünü bildirir (`X-App`, `X-Version`)                                 |
 | `WithCurrency("TRY")`           | arama ve katalog fiyatlarının para birimi                                                |
 | `WithRetries(n)`                | yeniden deneme sayısı (varsayılan 2)                                                     |
 | `WithPacing(false)`             | istemci tarafı hız ayarını kapatır                                                       |
 | `WithReadOnly()`                | okuma olmayan her isteği engeller                                                        |
 | `WithLogger(l)`                 | alışverişleri bir `*slog.Logger`'a loglar                                                |
 | `WithTrace(fn)`                 | her isteği, yanıtı ve yeniden denemeyi gözlemler                                         |
+
+### Uygulamanızı tanıtma
+
+Her istek, DomainNameAPI'ye isteği hangi entegrasyonun gönderdiğini bildiren `X-App` ve `X-Version` başlıklarını
+taşır. Varsayılan değerler `go` ve SDK sürümüdür. Kendi uygulamanızı `WithApp` ile (`NewClientFromEnv` kullanıyorsanız
+`DNA_APP` ve `DNA_APP_VERSION` ile) bildirin:
+
+```go
+client, err := dna.NewClient(resellerID, apiKey, dna.WithApp("WiseCP", "V2.0.20-beta"))
+// X-App: wisecp, X-Version: 2.0.20
+```
+
+Ad küçük harfe çevrilir ve yalnızca `a-z`, `0-9`, `.`, `_` ve `-` karakterleri kalır; sürümde yalnızca rakamlar ve
+noktalar kalır. Boş veya geçersiz bir ad `go` değerine, boş bir sürüm SDK sürümüne döner. User-Agent değişmez.
 
 ## Kodunuzu test etme
 
