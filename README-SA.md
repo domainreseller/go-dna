@@ -99,6 +99,8 @@ client, err := dna.NewClient(resellerID, apiKey)
 | `DNA_ENV`         | `production` (الافتراضي) أو `ote`                             |
 | `DNA_TEST_MODE`   | القيمة `true` تختار OTE (كما في حزم DomainNameAPI SDK الأخرى) |
 | `DNA_BASE_URL`    | عنوان URL أساسي مخصص، مثل وسيط (proxy)                        |
+| `DNA_APP`         | التطبيق الذي يستخدم SDK، يُرسل في `X-App`                     |
+| `DNA_APP_VERSION` | إصدار ذلك التطبيق، يُرسل في `X-Version`                       |
 
 ```go
 client, err := dna.NewClientFromEnv(dna.WithUserAgent("my-panel/1.4"))
@@ -513,12 +515,27 @@ case errors.As(err, &apiErr):
 | `WithHTTPClient(hc)`            | `*http.Client` الخاص بك (النقل، الوسيط، TLS)؛ ولا تُتبَّع إعادة التوجيه أبدًا            |
 | `WithTimeout(d)`                | مهلة كل محاولة (الافتراضي 60 s)                                                          |
 | `WithUserAgent("app/1.0")`      | وضع اسم منتجك قبل User-Agent                                                             |
+| `WithApp("wisecp", "2.0.20")`   | تسمية تطبيقك وإصداره (`X-App` و`X-Version`)                                              |
 | `WithCurrency("TRY")`           | عملة أسعار البحث والكتالوج                                                               |
 | `WithRetries(n)`                | عدد إعادات المحاولة (الافتراضي 2)                                                        |
 | `WithPacing(false)`             | تعطيل ضبط الوتيرة من جهة العميل                                                          |
 | `WithReadOnly()`                | منع كل طلب ليس قراءة                                                                     |
 | `WithLogger(l)`                 | تسجيل التبادلات في `*slog.Logger`                                                        |
 | `WithTrace(fn)`                 | مراقبة كل طلب واستجابة ومحاولة إعادة                                                     |
+
+### تعريف تطبيقك
+
+يحمل كل طلب الترويستين `X-App` و`X-Version` اللتين تُعلمان DomainNameAPI بالتكامل الذي أرسله. القيمتان الافتراضيتان
+هما `go` وإصدار SDK. سمِّ تطبيقك باستخدام `WithApp` (أو باستخدام `DNA_APP` و`DNA_APP_VERSION` عند استخدام
+`NewClientFromEnv`):
+
+```go
+client, err := dna.NewClient(resellerID, apiKey, dna.WithApp("WiseCP", "V2.0.20-beta"))
+// X-App: wisecp, X-Version: 2.0.20
+```
+
+يُحوَّل الاسم إلى أحرف صغيرة ولا يُبقى فيه إلا `a-z` و`0-9` و`.` و`_` و`-`، ولا يُبقى في الإصدار إلا الأرقام والنقاط.
+إذا كان الاسم فارغًا أو غير صالح يُستخدم `go`، وإذا كان الإصدار فارغًا يُستخدم إصدار SDK. لا يتغير User-Agent.
 
 ## اختبار شيفرتك
 

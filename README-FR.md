@@ -100,6 +100,8 @@ client, err := dna.NewClient(resellerID, apiKey)
 | `DNA_ENV`         | `production` (par défaut) ou `ote`                                   |
 | `DNA_TEST_MODE`   | `true` sélectionne OTE (comme dans les autres SDK DomainNameAPI)     |
 | `DNA_BASE_URL`    | une URL de base personnalisée, par ex. un proxy                      |
+| `DNA_APP`         | l'application qui utilise le SDK, envoyée dans `X-App`               |
+| `DNA_APP_VERSION` | la version de cette application, envoyée dans `X-Version`            |
 
 ```go
 client, err := dna.NewClientFromEnv(dna.WithUserAgent("my-panel/1.4"))
@@ -528,12 +530,27 @@ Indiquez le `CorrelationID` lorsque vous contactez le support.
 | `WithHTTPClient(hc)`            | votre propre `*http.Client` (transport, proxy, TLS) ; les redirections ne sont jamais suivies |
 | `WithTimeout(d)`                | délai d'expiration par tentative (60 s par défaut)                                       |
 | `WithUserAgent("app/1.0")`      | place votre produit devant le User-Agent                                                 |
+| `WithApp("wisecp", "2.0.20")`   | nomme votre application et sa version (`X-App`, `X-Version`)                             |
 | `WithCurrency("TRY")`           | devise des prix de recherche et du catalogue                                             |
 | `WithRetries(n)`                | nombre de nouvelles tentatives (2 par défaut)                                            |
 | `WithPacing(false)`             | désactive le cadencement côté client                                                     |
 | `WithReadOnly()`                | bloque toute requête qui n'est pas une lecture                                           |
 | `WithLogger(l)`                 | journalise les échanges dans un `*slog.Logger`                                           |
 | `WithTrace(fn)`                 | observe chaque requête, réponse et nouvelle tentative                                    |
+
+### Identifier votre application
+
+Chaque requête porte les en-têtes `X-App` et `X-Version`, qui indiquent à DomainNameAPI quelle intégration l'a
+envoyée. Par défaut, ils valent `go` et la version du SDK. Nommez votre propre application avec `WithApp` (ou avec
+`DNA_APP` et `DNA_APP_VERSION` si vous utilisez `NewClientFromEnv`) :
+
+```go
+client, err := dna.NewClient(resellerID, apiKey, dna.WithApp("WiseCP", "V2.0.20-beta"))
+// X-App: wisecp, X-Version: 2.0.20
+```
+
+Le nom est mis en minuscules et ne garde que `a-z`, `0-9`, `.`, `_` et `-` ; la version ne garde que les chiffres et
+les points. Un nom vide ou invalide revient à `go`, une version vide à la version du SDK. Le User-Agent ne change pas.
 
 ## Tester votre code
 

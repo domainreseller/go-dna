@@ -143,6 +143,99 @@ func TestRequestHeaders(t *testing.T) {
 	}
 }
 
+func TestAppHeaders(t *testing.T) {
+	sdkVersion := strings.Trim(regexp.MustCompile(`[^0-9.]`).ReplaceAllString(Version, ""), ".")
+	cases := []struct {
+		name                 string
+		opts                 []Option
+		wantApp, wantVersion string
+	}{
+		{"defaults", nil, "go", sdkVersion},
+		{"override", []Option{WithApp("whmcs", "8.13.1")}, "whmcs", "8.13.1"},
+		{"normalized", []Option{WithApp("WiseCP5", "V2.0.20-beta")}, "wisecp5", "2.0.20"},
+		{"invalid characters dropped", []Option{WithApp(" My Panel/2 ", ".v1.2.")}, "mypanel2", "1.2"},
+		{"empty fallbacks", []Option{WithApp("", "")}, "go", sdkVersion},
+		{"invalid name falls back", []Option{WithApp("ÇÖ!", "beta")}, "go", sdkVersion},
+		{"empty version only", []Option{WithApp("blesta", "")}, "blesta", sdkVersion},
+		{"last option wins", []Option{WithApp("a", "1"), WithApp("b", "2")}, "b", "2"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFakeAPI(t, ok(`{"resellerId":"r"}`))
+			if _, err := f.client(tc.opts...).Account.Get(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			r := f.last()
+			if got := r.Header.Get("X-App"); got != tc.wantApp {
+				t.Errorf("X-App = %q, want %q", got, tc.wantApp)
+			}
+			if got := r.Header.Get("X-Version"); got != tc.wantVersion {
+				t.Errorf("X-Version = %q, want %q", got, tc.wantVersion)
+			}
+			if got := r.Header.Get("User-Agent"); got != UserAgent {
+				t.Errorf("User-Agent changed: %q", got)
+			}
+		})
+	}
+}
+
+func TestAppHeadersOnRetries(t *testing.T) {
+	f := newFakeAPI(t, reply{Status: 429, Header: map[string]string{"Retry-After": "0"}}, ok(`{"resellerId":"r"}`))
+	if _, err := f.client(WithApp("WiseCP5", "V2.0.20-beta")).Account.Get(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got := f.requests()
+	if len(got) != 2 {
+		t.Fatalf("%d requests, want 2", len(got))
+	}
+	for i, r := range got {
+		if r.Header.Get("X-App") != "wisecp5" || r.Header.Get("X-Version") != "2.0.20" {
+			t.Errorf("attempt %d: X-App %q, X-Version %q", i+1, r.Header.Get("X-App"), r.Header.Get("X-Version"))
+		}
+	}
+}
+
+func TestAppFromEnv(t *testing.T) {
+	f := newFakeAPI(t, ok(`{"resellerId":"r"}`))
+	t.Setenv(EnvResellerID, testResellerID)
+	t.Setenv(EnvAPIKey, testAPIKey)
+	t.Setenv(EnvEnv, "")
+	t.Setenv(EnvTestMode, "")
+	t.Setenv(EnvBaseURL, f.srv.URL)
+	sdkVersion := strings.Trim(regexp.MustCompile(`[^0-9.]`).ReplaceAllString(Version, ""), ".")
+
+	check := func(name, wantApp, wantVersion string, opts ...Option) {
+		t.Helper()
+		c, err := NewClientFromEnv(append([]Option{WithPacing(false)}, opts...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.Account.Get(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		r := f.last()
+		if r.Header.Get("X-App") != wantApp || r.Header.Get("X-Version") != wantVersion {
+			t.Errorf("%s: X-App %q, X-Version %q; want %q, %q", name, r.Header.Get("X-App"), r.Header.Get("X-Version"), wantApp, wantVersion)
+		}
+	}
+
+	t.Setenv(EnvApp, "")
+	t.Setenv(EnvAppVersion, "")
+	check("unset", "go", sdkVersion)
+
+	t.Setenv(EnvApp, "WiseCP5")
+	t.Setenv(EnvAppVersion, "V2.0.20-beta")
+	check("both set", "wisecp5", "2.0.20")
+	check("option wins", "hostbill", "3.1", WithApp("HostBill", "3.1"))
+
+	t.Setenv(EnvAppVersion, "")
+	check("app only", "wisecp5", sdkVersion)
+
+	t.Setenv(EnvApp, "")
+	t.Setenv(EnvAppVersion, "1.2.3")
+	check("version only", "go", "1.2.3")
+}
+
 func TestValidationStopsTheRequest(t *testing.T) {
 	f := newFakeAPI(t, ok(`{}`))
 	c := f.client()
